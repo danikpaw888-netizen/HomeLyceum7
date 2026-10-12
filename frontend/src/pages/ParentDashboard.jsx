@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import StudentGradesView from '../components/StudentGradesView.jsx'
+import LearningTools from '../components/LearningTools.jsx'
 
 export default function ParentDashboard() {
   const [children, setChildren] = useState([])
@@ -96,6 +97,7 @@ export default function ParentDashboard() {
           )}
 
           <StudentGradesView studentId={selectedChild} />
+          <LearningTools role="parent" studentId={selectedChild} />
         </>
       )}
     </div>

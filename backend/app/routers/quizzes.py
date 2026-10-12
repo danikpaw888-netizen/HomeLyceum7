@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -114,7 +114,10 @@ def create_quiz(
         raise HTTPException(status_code=400, detail="Разрешено от 1 до 10 попыток")
     if quiz_in.duration_minutes is not None and not 1 <= quiz_in.duration_minutes <= 180:
         raise HTTPException(status_code=400, detail="Длительность должна быть от 1 до 180 минут")
-    if quiz_in.deadline and quiz_in.deadline <= datetime.utcnow():
+    deadline = quiz_in.deadline
+    if deadline and deadline.tzinfo is not None:
+        deadline = deadline.astimezone(timezone.utc).replace(tzinfo=None)
+    if deadline and deadline <= datetime.utcnow():
         raise HTTPException(status_code=400, detail="Срок теста должен быть в будущем")
     if not 1 <= len(quiz_in.questions) <= 100:
         raise HTTPException(status_code=400, detail="Тест должен содержать от 1 до 100 вопросов")
@@ -122,7 +125,7 @@ def create_quiz(
     quiz = models.Quiz(
         class_id=room.id, teacher_id=current_user.id, subject=quiz_in.subject.strip(),
         title=quiz_in.title.strip(), description=quiz_in.description.strip(),
-        deadline=quiz_in.deadline, duration_minutes=quiz_in.duration_minutes,
+        deadline=deadline, duration_minutes=quiz_in.duration_minutes,
         attempts_allowed=quiz_in.attempts_allowed, is_published=quiz_in.is_published, is_active=True,
     )
     db.add(quiz)

@@ -76,6 +76,25 @@ def _can_access_document(db: Session, user: models.User, record: models.Homescho
     return False
 
 
+def _can_access_submission(
+    db: Session,
+    user: models.User,
+    submission: models.Submission,
+    assignment: Optional[models.Assignment],
+) -> bool:
+    role = _role(user)
+    if role == "admin" or submission.student_id == user.id:
+        return True
+    if role == "parent":
+        return bool(db.query(models.ParentStudent.id).filter(
+            models.ParentStudent.parent_id == user.id,
+            models.ParentStudent.student_id == submission.student_id,
+        ).first())
+    if role == "teacher" and assignment:
+        return _can_access_assignment(db, user, assignment)
+    return False
+
+
 @router.get("/{filename}")
 def download_private_file(
     filename: str,
@@ -107,32 +126,14 @@ def download_private_file(
         submission = db.query(models.Submission).filter(models.Submission.id == attachment.submission_id).first()
         if submission:
             assignment = db.query(models.Assignment).filter(models.Assignment.id == submission.assignment_id).first()
-            role = _role(current_user)
-            permitted = role == "admin" or submission.student_id == current_user.id
-            if assignment and _can_access_assignment(db, current_user, assignment):
-                permitted = True
-            if role == "parent":
-                permitted = permitted or bool(db.query(models.ParentStudent.id).filter(
-                    models.ParentStudent.parent_id == current_user.id,
-                    models.ParentStudent.student_id == submission.student_id,
-                ).first())
-            if permitted:
+            if _can_access_submission(db, current_user, submission, assignment):
                 matches.append((attachment.file_path, attachment.original_filename))
 
     for submission in db.query(models.Submission).filter(
         models.Submission.file_path.endswith("/" + filename)
     ).all():
         assignment = db.query(models.Assignment).filter(models.Assignment.id == submission.assignment_id).first()
-        role = _role(current_user)
-        permitted = role == "admin" or submission.student_id == current_user.id
-        if assignment and _can_access_assignment(db, current_user, assignment):
-            permitted = True
-        if role == "parent":
-            permitted = permitted or bool(db.query(models.ParentStudent.id).filter(
-                models.ParentStudent.parent_id == current_user.id,
-                models.ParentStudent.student_id == submission.student_id,
-            ).first())
-        if permitted:
+        if _can_access_submission(db, current_user, submission, assignment):
             matches.append((submission.file_path, submission.original_filename or filename))
 
     for document in db.query(models.HomeschoolDocument).filter(

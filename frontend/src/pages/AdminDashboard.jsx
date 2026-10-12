@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { api } from '../api.js'
 import ClassManager from '../components/ClassManager.jsx'
+import LearningTools from '../components/LearningTools.jsx'
 
 const DOC_TYPES = [
   ['order', 'Приказ о переводе'],
@@ -301,6 +302,7 @@ export default function AdminDashboard() {
       )}
 
       {tab === 'classes' && <ClassManager />}
+      <LearningTools role="admin" />
     </div>
   )
 }

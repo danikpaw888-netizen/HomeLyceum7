@@ -7,6 +7,7 @@ from datetime import datetime
 from .. import models, schemas
 from ..auth import get_current_user, require_roles
 from ..database import get_db
+from ..events import log_action
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -60,9 +61,14 @@ def update_approval(
         raise HTTPException(status_code=404, detail="Пользователь не найден")
     if user.role == models.Role.admin:
         raise HTTPException(status_code=400, detail="Нельзя менять статус администратора")
+    previous_status = user.approval_status
     user.approval_status = "approved" if payload.approved else "rejected"
     user.approved_at = datetime.utcnow() if payload.approved else None
     user.approved_by = current_user.id if payload.approved else None
+    log_action(db, current_user, "approve" if payload.approved else "reject", "user", user.id,
+               f"{'Одобрена' if payload.approved else 'Отклонена'} заявка пользователя {user.email}",
+               before={"approval_status": previous_status},
+               after={"approval_status": user.approval_status, "email": user.email, "role": str(user.role.value if hasattr(user.role, 'value') else user.role)})
     db.commit()
     db.refresh(user)
     return user

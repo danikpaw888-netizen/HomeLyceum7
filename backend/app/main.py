@@ -10,6 +10,7 @@ from .config import settings
 from . import models
 from .auth import hash_password
 from .routers import auth, users, classes, assignments, submissions, schedule, gradebook, homeschool
+from .routers import notifications, calendar, reports, audit
 
 # Создаём таблицы и мягко обновляем прототипную БД без обязательной ручной миграции.
 Base.metadata.create_all(bind=engine)
@@ -40,6 +41,52 @@ def migrate_schema():
     if "archived_by" not in class_cols:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE classes ADD COLUMN archived_by INTEGER"))
+
+    # Мягкая миграция полей заданий и повторных попыток; старые записи не удаляются.
+    assignment_cols = {c["name"] for c in inspect(engine).get_columns("assignments")}
+    for name, sql_type in {
+        "is_active": "BOOLEAN NOT NULL DEFAULT TRUE",
+        "deleted_at": "TIMESTAMP",
+        "allow_resubmission": "BOOLEAN NOT NULL DEFAULT TRUE",
+        "max_attempts": "INTEGER NOT NULL DEFAULT 3",
+    }.items():
+        if name not in assignment_cols:
+            with engine.begin() as conn:
+                conn.execute(text(f"ALTER TABLE assignments ADD COLUMN {name} {sql_type}"))
+
+    submission_cols = {c["name"] for c in inspect(engine).get_columns("submissions")}
+    if "attempt_count" not in submission_cols:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE submissions ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 1"))
+
+    db = SessionLocal()
+    try:
+        # Однофайловые вложения предыдущих версий показываются как записи новой модели.
+        for item in db.query(models.Assignment).filter(models.Assignment.file_path.isnot(None)).all():
+            existing_attachment = db.query(models.AssignmentAttachment).filter(
+                models.AssignmentAttachment.assignment_id == item.id,
+                models.AssignmentAttachment.file_path == item.file_path,
+            ).first()
+            if not existing_attachment:
+                db.add(models.AssignmentAttachment(
+                    assignment_id=item.id, file_path=item.file_path,
+                    original_filename=item.original_filename or "Материал от учителя",
+                    is_active=True,
+                ))
+        for item in db.query(models.Submission).filter(models.Submission.file_path.isnot(None)).all():
+            existing_attachment = db.query(models.SubmissionAttachment).filter(
+                models.SubmissionAttachment.submission_id == item.id,
+                models.SubmissionAttachment.file_path == item.file_path,
+            ).first()
+            if not existing_attachment:
+                db.add(models.SubmissionAttachment(
+                    submission_id=item.id, file_path=item.file_path,
+                    original_filename=item.original_filename or "Файл ученика",
+                    is_current=True, attempt_number=item.attempt_count or 1,
+                ))
+        db.commit()
+    finally:
+        db.close()
 
     # История классов создаётся для уже существующих активных зачислений,
     # чтобы обновление не теряло прошлые сведения о переводах.
@@ -143,6 +190,10 @@ app.include_router(submissions.router)
 app.include_router(schedule.router)
 app.include_router(gradebook.router)
 app.include_router(homeschool.router)
+app.include_router(notifications.router)
+app.include_router(calendar.router)
+app.include_router(reports.router)
+app.include_router(audit.router)
 
 
 @app.get("/")

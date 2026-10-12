@@ -113,22 +113,39 @@ export const api = {
   myFeed() {
     return request('/assignments/my/feed')
   },
-  createAssignment({ class_id, subject, title, description, deadline, file }) {
+  createAssignment({ class_id, subject, title, description, deadline, files = [], allow_resubmission = true, max_attempts = 3 }) {
     const form = new FormData()
     form.append('class_id', class_id)
     form.append('subject', subject || '')
     form.append('title', title)
     form.append('description', description || '')
     form.append('deadline', deadline)
-    if (file) form.append('file', file)
+    form.append('allow_resubmission', String(allow_resubmission))
+    form.append('max_attempts', String(max_attempts))
+    for (const file of files) if (file) form.append('files', file)
     return request('/assignments/', { method: 'POST', body: form, isForm: true })
+  },
+  updateAssignment(assignmentId, { subject, title, description, deadline, files = [], keep_attachment_ids = [], allow_resubmission = true, max_attempts = 3 }) {
+    const form = new FormData()
+    form.append('subject', subject || '')
+    form.append('title', title)
+    form.append('description', description || '')
+    form.append('deadline', deadline)
+    form.append('allow_resubmission', String(allow_resubmission))
+    form.append('max_attempts', String(max_attempts))
+    form.append('keep_attachment_ids', keep_attachment_ids.join(','))
+    for (const file of files) if (file) form.append('files', file)
+    return request(`/assignments/${assignmentId}`, { method: 'PUT', body: form, isForm: true })
+  },
+  deleteAssignment(assignmentId) {
+    return request(`/assignments/${assignmentId}`, { method: 'DELETE' })
   },
 
   // --- submissions ---
-  async submitHomework(assignmentId, { comment, file }) {
+  async submitHomework(assignmentId, { comment, files = [] }) {
     const form = new FormData()
     form.append('comment', comment || '')
-    if (file) form.append('file', file)
+    for (const file of files) if (file) form.append('files', file)
     return request(`/submissions/${assignmentId}`, { method: 'POST', body: form, isForm: true })
   },
   mySubmissions() {
@@ -146,6 +163,18 @@ export const api = {
   childSubmissions(studentId) {
     return request(`/submissions/child/${studentId}`)
   },
+  notifications() { return request('/notifications/') },
+  unreadNotifications() { return request('/notifications/unread-count') },
+  markNotificationRead(id) { return request(`/notifications/${id}/read`, { method: 'PUT' }) },
+  markAllNotificationsRead() { return request('/notifications/read-all', { method: 'PUT' }) },
+  myCalendar(startDate, endDate) {
+    const q = new URLSearchParams()
+    if (startDate) q.set('start_date', startDate)
+    if (endDate) q.set('end_date', endDate)
+    return request(`/calendar/my${q.toString() ? `?${q.toString()}` : ''}`)
+  },
+  studentReport(studentId) { return request(`/reports/student/${studentId}`) },
+  auditLogs(limit = 100) { return request(`/audit/?limit=${limit}`) },
 
   fileUrl(path) {
     return path ? `${API_URL}${path}` : null

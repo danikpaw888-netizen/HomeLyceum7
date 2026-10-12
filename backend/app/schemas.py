@@ -86,6 +86,16 @@ class AssignmentCreate(BaseModel):
     deadline: datetime
 
 
+class AssignmentAttachmentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    assignment_id: int
+    file_path: str
+    original_filename: str
+    is_active: bool = True
+    created_at: datetime
+
+
 class AssignmentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -97,10 +107,26 @@ class AssignmentOut(BaseModel):
     deadline: datetime
     file_path: Optional[str] = None
     original_filename: Optional[str] = None
+    is_active: bool = True
+    deleted_at: Optional[datetime] = None
+    allow_resubmission: bool = True
+    max_attempts: int = 3
+    attachments: List[AssignmentAttachmentOut] = []
     created_at: datetime
 
 
 # ---------- Submissions ----------
+
+class SubmissionAttachmentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    submission_id: int
+    file_path: str
+    original_filename: str
+    is_current: bool = True
+    attempt_number: int = 1
+    created_at: datetime
+
 
 class SubmissionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -114,6 +140,34 @@ class SubmissionOut(BaseModel):
     teacher_feedback: str
     submitted_at: datetime
     graded_at: Optional[datetime] = None
+    attempt_count: int = 1
+    attachments: List[SubmissionAttachmentOut] = []
+
+
+class NotificationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    user_id: int
+    notification_type: str
+    title: str
+    message: str
+    link: Optional[str] = None
+    created_at: datetime
+    read_at: Optional[datetime] = None
+
+
+class AuditLogOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    actor_id: Optional[int] = None
+    actor_name: str
+    action: str
+    entity_type: str
+    entity_id: Optional[int] = None
+    details: str = ""
+    before_json: Optional[str] = None
+    after_json: Optional[str] = None
+    created_at: datetime
 
 
 class GradeIn(BaseModel):

@@ -8,6 +8,7 @@ from .. import models, schemas
 from ..access import can_grade_subject, role_value, teacher_class_ids
 from ..auth import get_current_user, require_roles
 from ..database import get_db
+from ..events import log_action
 
 router = APIRouter(prefix="/gradebook", tags=["gradebook"])
 
@@ -149,6 +150,9 @@ def add_grade(
         comment=grade_in.comment,
     )
     db.add(entry)
+    db.flush()
+    log_action(db, current_user, "create", "grade", entry.id, f"Добавлена оценка {entry.grade} ученику #{entry.student_id}",
+               after={"student_id": entry.student_id, "class_id": entry.class_id, "subject": entry.subject, "grade": entry.grade})
     db.commit()
     db.refresh(entry)
     return entry
@@ -171,9 +175,12 @@ def update_grade(
     if not (1 <= grade_in.grade <= 10):
         raise HTTPException(status_code=400, detail="Оценка должна быть от 1 до 10")
 
+    before = {"grade": entry.grade, "comment": entry.comment}
     entry.grade = grade_in.grade
     if grade_in.comment is not None:
         entry.comment = grade_in.comment
+    log_action(db, current_user, "update", "grade", entry.id, f"Изменена оценка ученика #{entry.student_id}",
+               before=before, after={"grade": entry.grade, "comment": entry.comment})
     db.commit()
     db.refresh(entry)
     return entry
@@ -191,6 +198,8 @@ def delete_grade(
     class_room = _class_or_403(db, entry.class_id, current_user)
     if not can_grade_subject(db, current_user, class_room, entry.subject):
         raise HTTPException(status_code=403, detail=NOT_YOUR_SUBJECT)
+    log_action(db, current_user, "delete", "grade", entry.id, f"Удалена оценка ученика #{entry.student_id}",
+               before={"grade": entry.grade, "subject": entry.subject, "student_id": entry.student_id})
     db.delete(entry)
     db.commit()
     return {"status": "ok"}
@@ -225,9 +234,12 @@ def mark_attendance(
     ).first()
 
     if existing:
+        before = {"status": existing.status.value if hasattr(existing.status, "value") else existing.status, "note": existing.note}
         existing.status = att_in.status
         existing.note = att_in.note
         existing.teacher_id = current_user.id
+        log_action(db, current_user, "update", "attendance", existing.id, f"Изменена посещаемость ученика #{existing.student_id}",
+                   before=before, after={"status": att_in.status.value if hasattr(att_in.status, "value") else att_in.status, "note": existing.note})
         db.commit()
         db.refresh(existing)
         return existing
@@ -242,6 +254,9 @@ def mark_attendance(
         note=att_in.note,
     )
     db.add(entry)
+    db.flush()
+    log_action(db, current_user, "create", "attendance", entry.id, f"Отмечена посещаемость ученика #{entry.student_id}",
+               after={"status": att_in.status.value if hasattr(att_in.status, "value") else att_in.status, "subject": entry.subject, "date": entry.date})
     db.commit()
     db.refresh(entry)
     return entry

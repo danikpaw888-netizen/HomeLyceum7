@@ -3,6 +3,7 @@ import { api } from '../api.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import AssignmentCard from '../components/AssignmentCard.jsx'
 import StudentGradesView from '../components/StudentGradesView.jsx'
+import LearningTools from '../components/LearningTools.jsx'
 
 export default function StudentDashboard() {
   const { user } = useAuth()
@@ -147,6 +148,7 @@ export default function StudentDashboard() {
       )}
 
       {tab === 'grades' && <StudentGradesView studentId={user.id} />}
+      <LearningTools role="student" studentId={user.id} />
     </div>
   )
 }

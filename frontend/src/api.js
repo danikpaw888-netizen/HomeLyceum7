@@ -184,9 +184,8 @@ export const api = {
 
   fileUrl(path) {
     if (!path) return null
-    // Older database rows keep /uploads/... paths, but all reads use the secured endpoint.
-    const safePath = path.replace(/^\\/uploads\\//, '/files/')
-    return API_URL.replace(/\\/$/, '') + (safePath.startsWith('/') ? safePath : '/' + safePath)
+    const safePath = path.replace(/^\/uploads\//, '/files/')
+    return API_URL.replace(/\/$/, '') + (safePath.startsWith('/') ? safePath : '/' + safePath)
   },
 
   // --- online quizzes ---

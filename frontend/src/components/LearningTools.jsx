@@ -11,6 +11,8 @@ export default function LearningTools({ role, studentId }) {
   const [notifications, setNotifications] = useState([])
   const [report, setReport] = useState(null)
   const [audit, setAudit] = useState([])
+  const [students, setStudents] = useState([])
+  const [selectedReportStudent, setSelectedReportStudent] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -21,18 +23,19 @@ export default function LearningTools({ role, studentId }) {
     setLoading(true); setError('')
     try { setEvents(await api.myCalendar(today(), inDays(30))) } catch (e) { setError(e.message) } finally { setLoading(false) }
   }
-  async function loadReport() {
-    if (!studentId) return
+  async function loadReport(id = activeReportStudent) {
+    if (!id) return
     setLoading(true); setError('')
-    try { setReport(await api.studentReport(studentId)) } catch (e) { setError(e.message) } finally { setLoading(false) }
+    try { setReport(await api.studentReport(id)) } catch (e) { setError(e.message) } finally { setLoading(false) }
   }
   async function loadAudit() {
     setLoading(true); setError('')
     try { setAudit(await api.auditLogs(100)) } catch (e) { setError(e.message) } finally { setLoading(false) }
   }
 
-  useEffect(() => { loadNotifications(); loadCalendar() }, [])
-  useEffect(() => { if (tab === 'report' && studentId) loadReport(); if (tab === 'audit' && role === 'admin') loadAudit() }, [tab, studentId])
+  const activeReportStudent = role === 'teacher' ? (selectedReportStudent || '') : studentId
+  useEffect(() => { loadNotifications(); loadCalendar(); if (role === 'teacher') api.listStudents().then(setStudents).catch(e => setError(e.message)) }, [])
+  useEffect(() => { if (tab === 'report' && activeReportStudent) loadReport(activeReportStudent); if (tab === 'audit' && role === 'admin') loadAudit() }, [tab, activeReportStudent])
 
   async function markRead(item) {
     try {
@@ -61,7 +64,7 @@ export default function LearningTools({ role, studentId }) {
   const tabs = [
     ['calendar', '📅 Календарь'],
     ['notifications', `🔔 Уведомления${notifications.some(n => !n.read_at) ? ` · ${notifications.filter(n => !n.read_at).length}` : ''}`],
-    ...(studentId ? [['report', '📊 Отчёт']] : []),
+    ...((studentId || role === 'teacher') ? [['report', '📊 Отчёт ученика']] : []),
     ...(role === 'admin' ? [['audit', '🛡️ Журнал действий']] : []),
   ]
   return (
@@ -97,7 +100,12 @@ export default function LearningTools({ role, studentId }) {
             <p className="text-xs text-gray-600 mt-1">{n.message}</p><p className="text-[11px] text-gray-400 mt-2">{dateLabel(n.created_at)}</p>
           </div>)}</div>}
       </>}
-      {tab === 'report' && studentId && <>
+      {tab === 'report' && activeReportStudent && <>
+        {role === 'teacher' && <label className="block mb-3 text-sm">Ученик
+          <select value={selectedReportStudent} onChange={e => { setSelectedReportStudent(e.target.value); setReport(null) }} className="ml-2 border border-gray-200 rounded-lg px-3 py-2">
+            <option value="">Выберите ученика</option>{students.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+          </select>
+        </label>}
         {!report ? <p className="text-sm text-gray-500">{loading ? 'Считаем показатели…' : 'Отчёт пока не загружен.'}</p> : <>
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3"><p className="text-sm text-gray-500">Успеваемость, сдача заданий и посещаемость</p>
             <button onClick={exportReport} className="rounded-lg bg-brand-600 text-white px-3 py-2 text-xs font-medium">Экспорт CSV</button></div>

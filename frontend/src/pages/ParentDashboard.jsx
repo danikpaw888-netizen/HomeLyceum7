@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import StudentGradesView from '../components/StudentGradesView.jsx'
 import LearningTools from '../components/LearningTools.jsx'
+import ProtectedFileLink from '../components/ProtectedFileLink.jsx'
 
 export default function ParentDashboard() {
   const [children, setChildren] = useState([])
@@ -86,10 +87,10 @@ export default function ParentDashboard() {
           {homeschool.documents?.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-3">
               {homeschool.documents.map((doc) => (
-                <a key={doc.id} href={api.fileUrl(doc.file_path)} target="_blank" rel="noreferrer"
+                <ProtectedFileLink key={doc.id} path={doc.file_path}
                   className="bg-white/70 border border-amber-200 rounded-lg px-2.5 py-1.5 text-xs text-amber-800 hover:bg-white">
                   📎 {doc.title}
-                </a>
+                </ProtectedFileLink>
               ))}
             </div>
           )}

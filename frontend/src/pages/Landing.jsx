@@ -201,7 +201,7 @@ export default function Landing() {
         <img src="/logo.png" alt="HomeLyceum7" className="w-8 h-8 mx-auto mb-2 object-contain opacity-80" />
         <p>HomeLyceum7 · Школа-лицей №7 имени Н.А. Марабаева</p>
         <p className="mt-3 text-[11px] tracking-wide text-gray-400">
-          made by Legacy `n Amir
+          created by Legacy `n Amir
           <span className="mx-1.5 text-gray-300">·</span>
           <a
             href="https://github.com/danikpaw888-netizen/homelyceum7"

@@ -315,6 +315,9 @@ export const api = {
     form.append('file', file)
     return request(`/homeschool/${recordId}/documents`, { method: 'POST', body: form, isForm: true })
   },
+  deleteHomeschoolDocument(recordId, documentId) {
+    return request(`/homeschool/${recordId}/documents/${documentId}`, { method: 'DELETE' })
+  },
   allHomeschoolRecords() {
     return request('/homeschool/admin/all')
   },

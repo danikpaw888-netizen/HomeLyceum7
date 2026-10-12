@@ -10,6 +10,7 @@ from .. import models, schemas
 from ..auth import get_current_user, require_roles
 from ..config import settings
 from ..database import get_db
+from ..events import log_action
 
 router = APIRouter(prefix="/homeschool", tags=["homeschool"])
 
@@ -95,6 +96,67 @@ async def add_document(
     db.commit()
     db.refresh(doc)
     return doc
+
+
+
+@router.delete("/{record_id}/documents/{document_id}")
+def delete_document(
+    record_id: int,
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_roles("admin")),
+):
+    """Удаляет вложение из дела домашнего обучения, не удаляя само дело или историю ученика."""
+    record = db.query(models.HomeschoolRecord).filter(
+        models.HomeschoolRecord.id == record_id
+    ).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Запись домашнего обучения не найдена")
+
+    document = db.query(models.HomeschoolDocument).filter(
+        models.HomeschoolDocument.id == document_id,
+        models.HomeschoolDocument.record_id == record_id,
+    ).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="Документ не найден в этом деле")
+
+    stored_path = document.file_path
+    original_filename = document.original_filename
+    document_title = document.title
+    # Only remove the physical file when no other known row references the same path.
+    other_homeschool_reference = db.query(models.HomeschoolDocument.id).filter(
+        models.HomeschoolDocument.file_path == stored_path,
+        models.HomeschoolDocument.id != document.id,
+    ).first()
+    other_assignment_reference = db.query(models.Assignment.id).filter(
+        models.Assignment.file_path == stored_path
+    ).first()
+    other_submission_reference = db.query(models.Submission.id).filter(
+        models.Submission.file_path == stored_path
+    ).first()
+    log_action(
+        db, current_user, "delete_document", "homeschool_document", document.id,
+        f"Удалено вложение «{document_title}» из дела домашнего обучения #{record_id}",
+        before={"record_id": record_id, "title": document_title, "original_filename": original_filename,
+                "file_path": stored_path},
+        after={"deleted": True, "record_preserved": True},
+    )
+    db.delete(document)
+    db.commit()
+
+    if not (other_homeschool_reference or other_assignment_reference or other_submission_reference):
+        upload_root = os.path.realpath(settings.UPLOAD_DIR)
+        stored_name = os.path.basename((stored_path or "").replace("\\\\", "/"))
+        if stored_name not in ("", ".", ".."):
+            disk_path = os.path.realpath(os.path.join(upload_root, stored_name))
+            if os.path.commonpath([upload_root, disk_path]) == upload_root and os.path.isfile(disk_path):
+                try:
+                    os.remove(disk_path)
+                except OSError:
+                    # The DB reference is already removed; keep the endpoint idempotent.
+                    pass
+
+    return {"status": "ok", "deleted_id": document_id, "message": "Документ удалён из дела."}
 
 
 @router.get("/admin/all", response_model=List[schemas.HomeschoolOut])

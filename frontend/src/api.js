@@ -95,6 +95,12 @@ export const api = {
   pendingUsers() {
     return request('/users/pending')
   },
+  adminAccounts() {
+    return request('/users/accounts')
+  },
+  deactivateAccount(userId) {
+    return request(`/users/${userId}`, { method: 'DELETE' })
+  },
   updateUserApproval(userId, approved) {
     return request(`/users/${userId}/approval`, { method: 'PUT', body: { approved } })
   },

@@ -184,10 +184,9 @@ export const api = {
 
   fileUrl(path) {
     if (!path) return null
-    // Stored upload paths stay backward-compatible in the DB, but the public
-    // /uploads mount is gone. Every file request goes through permission checks.
+    // Older database rows keep /uploads/... paths, but all reads use the secured endpoint.
     const safePath = path.replace(/^\\/uploads\\//, '/files/')
-    return `${API_URL.replace(/\\/$/, '')}${safePath.startsWith('/') ? safePath : `/${safePath}`}`
+    return API_URL.replace(/\\/$/, '') + (safePath.startsWith('/') ? safePath : '/' + safePath)
   },
 
   // --- online quizzes ---

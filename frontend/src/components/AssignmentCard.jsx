@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { api } from '../api.js'
+import ProtectedFileLink from './ProtectedFileLink.jsx'
 
 const dateLabel = iso => new Date(iso).toLocaleString('ru-RU', { dateStyle:'medium', timeStyle:'short' })
 function gradeColor(grade) { if (grade>=9) return 'text-emerald-700 bg-emerald-50 border-emerald-200'; if (grade>=7) return 'text-brand-700 bg-brand-50 border-brand-200'; if (grade>=5) return 'text-amber-700 bg-amber-50 border-amber-200'; return 'text-red-700 bg-red-50 border-red-200' }
@@ -20,9 +21,9 @@ export default function AssignmentCard({ assignment, submission, onSubmitted }) 
  <div className="flex justify-between items-start gap-3 flex-wrap"><div>{assignment.subject&&<p className="text-xs font-bold text-brand-700 uppercase tracking-wide">{assignment.subject}</p>}<h2 className="font-semibold text-gray-800 mt-0.5">{assignment.title}</h2></div>
  <span className={`text-xs font-medium px-2.5 py-1 rounded-full border ${overdue?'text-red-600 bg-red-50 border-red-100':'text-amber-700 bg-amber-50 border-amber-100'}`}>{overdue?'⏰ Просрочено':'📅 Срок'} · {dateLabel(assignment.deadline)}</span></div>
  {assignment.description&&<p className="mt-3 text-gray-600 text-sm leading-relaxed whitespace-pre-wrap">{assignment.description}</p>}
- {shownFiles.length>0&&<div className="mt-3 flex flex-wrap gap-2">{shownFiles.map((f,i)=><a key={f.id||f.file_path||i} href={api.fileUrl(f.file_path)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 bg-brand-50 hover:bg-brand-100 px-2.5 py-1.5 rounded-md">📎 {f.original_filename||'Материал от учителя'}</a>)}</div>}
+ {shownFiles.length>0&&<div className="mt-3 flex flex-wrap gap-2">{shownFiles.map((f,i)=><ProtectedFileLink key={f.id||f.file_path||i} path={f.file_path} className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 bg-brand-50 hover:bg-brand-100 px-2.5 py-1.5 rounded-md">📎 {f.original_filename||'Материал от учителя'}</ProtectedFileLink>)}</div>}
  {submission&&<div className="mt-4 bg-gray-50 rounded-lg p-3.5 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><p className="font-medium text-gray-700">{graded?'✅ Проверено':'⏳ На проверке'} · Попытка {attempts}{assignment.allow_resubmission!==false? ` из ${maxAttempts}`:''}</p>{graded&&<span className={`font-bold px-2.5 py-1 rounded-md border ${gradeColor(submission.grade)}`}>{submission.grade}/10</span>}</div>
- <div className="flex flex-wrap gap-2 mt-2">{shownSubmissionFiles.map((f,i)=><a key={f.id||f.file_path||i} href={api.fileUrl(f.file_path)} target="_blank" rel="noreferrer" className="text-xs text-brand-600 underline">{f.original_filename||'Открыть мой файл'}</a>)}</div>
+ <div className="flex flex-wrap gap-2 mt-2">{shownSubmissionFiles.map((f,i)=><ProtectedFileLink key={f.id||f.file_path||i} path={f.file_path} className="text-xs text-brand-600 underline">{f.original_filename||'Открыть мой файл'}</ProtectedFileLink>)}</div>
  {submission.comment&&<p className="text-xs text-gray-500 mt-2">Комментарий: {submission.comment}</p>}{submission.teacher_feedback&&<p className="text-xs text-gray-700 mt-2">Ответ учителя: {submission.teacher_feedback}</p>}
  {canResubmit&&<p className="text-xs text-gray-500 mt-2">Можно отправить исправленный вариант. Предыдущая попытка останется в истории.</p>}
  {submission&&!canResubmit&&assignment.allow_resubmission!==false&&<p className="text-xs text-gray-500 mt-2">Лимит попыток исчерпан.</p>}

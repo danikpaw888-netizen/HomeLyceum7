@@ -188,6 +188,30 @@ export const api = {
     return API_URL.replace(/\/$/, '') + (safePath.startsWith('/') ? safePath : '/' + safePath)
   },
 
+  async openFile(path) {
+    const url = this.fileUrl(path)
+    if (!url) throw new Error('Ссылка на файл отсутствует')
+    // Open a tab synchronously during the click, then fetch with the login token.
+    const viewer = window.open('about:blank', '_blank')
+    if (!viewer) throw new Error('Разреши всплывающие окна для этого сайта и попробуй ещё раз')
+    try {
+      const token = getToken()
+      const response = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      if (!response.ok) {
+        let detail = response.status === 401 ? 'Войди в аккаунт ещё раз, чтобы открыть документ.' : 'Не удалось открыть документ.'
+        try { const data = await response.json(); detail = data.detail || detail } catch (_) {}
+        throw new Error(detail)
+      }
+      const blob = await response.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      viewer.location.href = objectUrl
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000)
+    } catch (error) {
+      viewer.close()
+      throw error
+    }
+  },
+
   // --- online quizzes ---
   createQuiz(payload) {
     return request('/quizzes/', { method: 'POST', body: payload })

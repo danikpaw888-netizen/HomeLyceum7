@@ -5,6 +5,7 @@ import StudentGradesView from '../components/StudentGradesView.jsx'
 import GradeJournalTable from '../components/GradeJournalTable.jsx'
 import { gradeColor } from '../utils/grades.js'
 import { todayStr } from '../utils/dates.js'
+import ProtectedFileLink from '../components/ProtectedFileLink.jsx'
 
 const ATTENDANCE_LABELS = {
   present: { label: 'Был', icon: '✅', className: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
@@ -675,15 +676,13 @@ function HomeschoolTab({ student, isAdmin, onHomeschoolChanged }) {
                   {r.documents?.length > 0 && (
                     <div className="mt-1.5 flex flex-wrap gap-1.5">
                       {r.documents.map((doc) => (
-                        <a
+                        <ProtectedFileLink
                           key={doc.id}
-                          href={api.fileUrl(doc.file_path)}
-                          target="_blank"
-                          rel="noreferrer"
+                          path={doc.file_path}
                           className="inline-flex items-center gap-1 rounded-full bg-white border border-amber-200 px-2 py-1 text-[11px] text-brand-700 hover:bg-amber-100"
                         >
                           📎 {doc.title}
-                        </a>
+                        </ProtectedFileLink>
                       ))}
                     </div>
                   )}

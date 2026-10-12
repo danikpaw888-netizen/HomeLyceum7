@@ -95,33 +95,41 @@ def _can_access_submission(
     return False
 
 
-@router.get("/{filename}")
+@router.get("/{filename:path}")
 def download_private_file(
     filename: str,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    # Only opaque server-generated filenames are accepted. Never join a user path
-    # to the filesystem or expose the old /uploads mount as a public directory.
-    if filename != os.path.basename(filename) or filename in ("", ".", "..") or "/" in filename or "\\" in filename:
+    # Support legacy nested upload paths while rejecting absolute paths and traversal.
+    # The final filesystem path is resolved and checked against UPLOAD_DIR below.
+    relative_path = filename.replace("\\", "/")
+    path_parts = relative_path.split("/")
+    if (
+        not relative_path
+        or relative_path.startswith("/")
+        or any(part in ("", ".", "..") for part in path_parts)
+        or ":" in path_parts[0]
+        or "\x00" in relative_path
+    ):
         raise HTTPException(status_code=404, detail="Файл не найден")
 
     matches: list[Tuple[str, str]] = []
     for attachment in db.query(models.AssignmentAttachment).filter(
-        models.AssignmentAttachment.file_path.endswith("/" + filename)
+        models.AssignmentAttachment.file_path.endswith("/" + relative_path)
     ).all():
         assignment = db.query(models.Assignment).filter(models.Assignment.id == attachment.assignment_id).first()
         if assignment and _can_access_assignment(db, current_user, assignment):
             matches.append((attachment.file_path, attachment.original_filename))
 
     for assignment in db.query(models.Assignment).filter(
-        models.Assignment.file_path.endswith("/" + filename)
+        models.Assignment.file_path.endswith("/" + relative_path)
     ).all():
         if _can_access_assignment(db, current_user, assignment):
             matches.append((assignment.file_path, assignment.original_filename or filename))
 
     for attachment in db.query(models.SubmissionAttachment).filter(
-        models.SubmissionAttachment.file_path.endswith("/" + filename)
+        models.SubmissionAttachment.file_path.endswith("/" + relative_path)
     ).all():
         submission = db.query(models.Submission).filter(models.Submission.id == attachment.submission_id).first()
         if submission:
@@ -130,14 +138,14 @@ def download_private_file(
                 matches.append((attachment.file_path, attachment.original_filename))
 
     for submission in db.query(models.Submission).filter(
-        models.Submission.file_path.endswith("/" + filename)
+        models.Submission.file_path.endswith("/" + relative_path)
     ).all():
         assignment = db.query(models.Assignment).filter(models.Assignment.id == submission.assignment_id).first()
         if _can_access_submission(db, current_user, submission, assignment):
             matches.append((submission.file_path, submission.original_filename or filename))
 
     for document in db.query(models.HomeschoolDocument).filter(
-        models.HomeschoolDocument.file_path.endswith("/" + filename)
+        models.HomeschoolDocument.file_path.endswith("/" + relative_path)
     ).all():
         record = db.query(models.HomeschoolRecord).filter(
             models.HomeschoolRecord.id == document.record_id
@@ -152,7 +160,7 @@ def download_private_file(
 
     stored_path, original_name = matches[0]
     upload_root = os.path.realpath(settings.UPLOAD_DIR)
-    disk_path = os.path.realpath(os.path.join(upload_root, filename))
+    disk_path = os.path.realpath(os.path.join(upload_root, relative_path))
     if os.path.commonpath([upload_root, disk_path]) != upload_root or not os.path.isfile(disk_path):
         raise HTTPException(status_code=404, detail="Файл не найден")
 

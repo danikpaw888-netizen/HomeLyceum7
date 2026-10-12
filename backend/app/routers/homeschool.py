@@ -138,6 +138,9 @@ def student_records(
 ):
     role = current_user.role.value if hasattr(current_user.role, "value") else current_user.role
 
+    if role not in ("admin", "student", "parent"):
+        raise HTTPException(status_code=403, detail="Нет доступа к документам домашнего обучения")
+
     if role == "student" and current_user.id != student_id:
         raise HTTPException(status_code=403, detail="Нет доступа")
 

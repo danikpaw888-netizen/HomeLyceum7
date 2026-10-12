@@ -39,6 +39,16 @@ def students_without_class(
     return q.all()
 
 
+@router.get("/accounts", response_model=List[schemas.UserOut])
+def admin_accounts(
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_roles("admin")),
+):
+    return db.query(models.User).filter(
+        models.User.approval_status != "deleted"
+    ).order_by(models.User.created_at.desc()).all()
+
+
 @router.get("/pending", response_model=List[schemas.UserOut])
 def pending_users(
     db: Session = Depends(get_db),

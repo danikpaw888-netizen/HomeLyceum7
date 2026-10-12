@@ -115,7 +115,8 @@ export default function AdminDashboard() {
 
   async function createHomeschool(e) {
     e.preventDefault()
-    const form = new FormData(e.currentTarget)
+    const formElement = e.currentTarget
+    const form = new FormData(formElement)
     try {
       const documents = DOC_TYPES.map(([id, label]) => ({
         document_type: id,
@@ -132,7 +133,7 @@ export default function AdminDashboard() {
       })
       setRecords((prev) => [record, ...prev])
       setSelectedStudent(String(record.student_id))
-      e.currentTarget.reset()
+      formElement.reset()
       setMessage(record.uploadErrors?.length
         ? `Перевод оформлен. Не удалось прикрепить: ${record.uploadErrors.map((x) => x.title).join(', ')}. Остальные документы сохранены.`
         : documents.length
@@ -146,7 +147,8 @@ export default function AdminDashboard() {
 
   async function addDocument(recordId, e) {
     e.preventDefault()
-    const form = new FormData(e.currentTarget)
+    const formElement = e.currentTarget
+    const form = new FormData(formElement)
     const file = form.get('file')
     if (!file || !file.name) return
     try {
@@ -158,7 +160,7 @@ export default function AdminDashboard() {
       setRecords((prev) => prev.map((r) =>
         r.id === recordId ? { ...r, documents: [...(r.documents || []), doc] } : r
       ))
-      e.currentTarget.reset()
+      formElement.reset()
       setMessage('Документ добавлен в дело.')
     } catch (err) {
       setError(err.message)

@@ -84,6 +84,61 @@ def update_approval(
     return user
 
 
+
+@router.delete("/{user_id}")
+def delete_account(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_roles("admin")),
+):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Аккаунт не найден")
+    if user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="Нельзя отключить собственный аккаунт администратора")
+    if user.role == models.Role.admin:
+        raise HTTPException(status_code=400, detail="Нельзя отключить аккаунт администратора")
+    if user.approval_status == "deleted":
+        return {"status": "ok", "deleted_id": user.id}
+
+    previous_status = user.approval_status
+    role_value = user.role.value if hasattr(user.role, "value") else str(user.role)
+    now = datetime.utcnow()
+    if role_value == "student":
+        enrollments = db.query(models.Enrollment).filter(
+            models.Enrollment.student_id == user.id
+        ).all()
+        for enrollment in enrollments:
+            class_room = db.query(models.ClassRoom).filter(
+                models.ClassRoom.id == enrollment.class_id
+            ).first()
+            history = db.query(models.StudentClassHistory).filter(
+                models.StudentClassHistory.student_id == user.id,
+                models.StudentClassHistory.class_id == enrollment.class_id,
+                models.StudentClassHistory.left_at.is_(None),
+            ).order_by(models.StudentClassHistory.joined_at.desc()).first()
+            if history:
+                history.left_at = now
+                if class_room:
+                    history.class_name = class_room.name
+
+    user.approval_status = "deleted"
+    user.approved_at = None
+    user.approved_by = current_user.id
+    log_action(
+        db, current_user, "disable_account", "user", user.id,
+        f"Отключён аккаунт «{user.full_name}» ({user.email}), роль: {role_value}. Учебная история сохранена.",
+        before={"approval_status": previous_status, "role": role_value, "email": user.email},
+        after={"approval_status": "deleted", "role": role_value, "email": user.email,
+               "learning_history_preserved": True},
+    )
+    db.commit()
+    return {
+        "status": "ok",
+        "deleted_id": user.id,
+        "message": "Аккаунт отключён. Связанные учебные данные и история сохранены.",
+    }
+
 @router.get("/", response_model=List[schemas.UserOut])
 def list_users(
     role: str | None = None,

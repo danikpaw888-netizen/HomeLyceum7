@@ -71,6 +71,8 @@ def update_approval(
         raise HTTPException(status_code=404, detail="Пользователь не найден")
     if user.role == models.Role.admin:
         raise HTTPException(status_code=400, detail="Нельзя менять статус администратора")
+    if user.approval_status == "deleted":
+        raise HTTPException(status_code=400, detail="Отключённый аккаунт нельзя одобрить повторно")
     previous_status = user.approval_status
     user.approval_status = "approved" if payload.approved else "rejected"
     user.approved_at = datetime.utcnow() if payload.approved else None

@@ -22,7 +22,8 @@ function parseUtcDate(value) {
   if (!value) return null
   const text = String(value)
   // API timestamps without an offset come from datetime.utcnow() and are UTC.
-  return new Date(/(?:Z|[+-]\\d{2}:\\d{2})$/i.test(text) ? text : `${text}Z`)
+  const hasTimezone = text.endsWith('Z') || /[+-][0-9]{2}:[0-9]{2}$/.test(text)
+  return new Date(hasTimezone ? text : text + 'Z')
 }
 function formatDate(value) {
   if (!value) return 'Без срока'

@@ -230,6 +230,10 @@ function StudentQuizCenter() {
     const timer=window.setInterval(()=>setNow(Date.now()),1000)
     return ()=>window.clearInterval(timer)
   },[activeAttempt?.id])
+  useEffect(()=>{
+    if(!activeAttempt)return
+    try { window.localStorage.setItem(`homelyceum7-quiz-${activeAttempt.id}`, JSON.stringify(answers)) } catch (_) {}
+  },[answers,activeAttempt?.id])
   const remaining = activeQuiz&&activeAttempt&&activeQuiz.duration_minutes
     ? Math.max(0,Math.ceil((parseUtcDate(activeAttempt.started_at).getTime()+activeQuiz.duration_minutes*60000-now)/1000))
     : null
@@ -238,7 +242,10 @@ function StudentQuizCenter() {
     setError('');setNotice('');setLastResult(null);setBusy(true)
     try{
       const attempt=await api.startQuiz(quiz.id)
-      setAnswers({});setActiveQuiz(quiz);setActiveAttempt(attempt);submitLock.current=false;autoSubmitTriggered.current=false;setNow(Date.now())
+      let savedAnswers = {}
+      try { savedAnswers = JSON.parse(window.localStorage.getItem(`homelyceum7-quiz-${attempt.id}`) || '{}') } catch (_) {}
+      setAnswers(savedAnswers && typeof savedAnswers === 'object' ? savedAnswers : {})
+      setActiveQuiz(quiz);setActiveAttempt(attempt);submitLock.current=false;autoSubmitTriggered.current=false;setNow(Date.now())
     }catch(e){setError(e.message);await load()}finally{setBusy(false)}
   }
   async function submit(auto=false) {
@@ -247,6 +254,7 @@ function StudentQuizCenter() {
     try{
       const payload=(activeQuiz.questions||[]).map(q=>({question_id:q.id,selected_option_ids:answers[q.id]?.selected_option_ids||[],text_answer:answers[q.id]?.text_answer||''}))
       const result=await api.submitQuizAttempt(activeAttempt.id,payload)
+      try { window.localStorage.removeItem(`homelyceum7-quiz-${activeAttempt.id}`) } catch (_) {}
       setLastResult(result);setActiveQuiz(null);setActiveAttempt(null);setAnswers({})
       setNotice(auto?'Время закончилось — ответы отправлены.':'Тест отправлен.')
       await load()

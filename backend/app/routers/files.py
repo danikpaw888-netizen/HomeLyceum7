@@ -123,13 +123,13 @@ def download_private_file(
             matches.append((attachment.file_path, attachment.original_filename))
 
     for assignment in db.query(models.Assignment).filter(
-        models.Assignment.file_path.endswith("/" + filename)
+        models.Assignment.file_path.endswith("/" + relative_path)
     ).all():
         if _can_access_assignment(db, current_user, assignment):
             matches.append((assignment.file_path, assignment.original_filename or filename))
 
     for attachment in db.query(models.SubmissionAttachment).filter(
-        models.SubmissionAttachment.file_path.endswith("/" + filename)
+        models.SubmissionAttachment.file_path.endswith("/" + relative_path)
     ).all():
         submission = db.query(models.Submission).filter(models.Submission.id == attachment.submission_id).first()
         if submission:
@@ -138,14 +138,14 @@ def download_private_file(
                 matches.append((attachment.file_path, attachment.original_filename))
 
     for submission in db.query(models.Submission).filter(
-        models.Submission.file_path.endswith("/" + filename)
+        models.Submission.file_path.endswith("/" + relative_path)
     ).all():
         assignment = db.query(models.Assignment).filter(models.Assignment.id == submission.assignment_id).first()
         if _can_access_submission(db, current_user, submission, assignment):
             matches.append((submission.file_path, submission.original_filename or filename))
 
     for document in db.query(models.HomeschoolDocument).filter(
-        models.HomeschoolDocument.file_path.endswith("/" + filename)
+        models.HomeschoolDocument.file_path.endswith("/" + relative_path)
     ).all():
         record = db.query(models.HomeschoolRecord).filter(
             models.HomeschoolRecord.id == document.record_id

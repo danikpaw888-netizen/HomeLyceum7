@@ -168,6 +168,26 @@ export default function AdminDashboard() {
     }
   }
 
+  async function deleteHomeschoolDocument(recordId, doc) {
+    const confirmed = window.confirm(
+      `Удалить документ «${doc.title || doc.original_filename}» из дела домашнего обучения? Сам перевод и учебная история останутся.`
+    )
+    if (!confirmed) return
+    setError('')
+    setMessage('')
+    try {
+      await api.deleteHomeschoolDocument(recordId, doc.id)
+      setRecords((prev) => prev.map((record) =>
+        record.id === recordId
+          ? { ...record, documents: (record.documents || []).filter((item) => item.id !== doc.id) }
+          : record
+      ))
+      setMessage('Документ удалён из дела.')
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   async function closeRecord(record) {
     const end = window.prompt('Дата возврата (ГГГГ-ММ-ДД):', today())
     if (!end) return
@@ -309,6 +329,7 @@ export default function AdminDashboard() {
                 record={record}
                 student={students.find((s) => s.id === record.student_id)}
                 onAddDocument={addDocument}
+                onDeleteDocument={deleteHomeschoolDocument}
                 onClose={() => closeRecord(record)}
               />
             ))}
@@ -375,7 +396,7 @@ export default function AdminDashboard() {
   )
 }
 
-function HomeschoolCard({ record, student, onAddDocument, onClose }) {
+function HomeschoolCard({ record, student, onAddDocument, onDeleteDocument, onClose }) {
   const [activeDocType, setActiveDocType] = useState(DOC_TYPES[0][0])
   const docs = record.documents || []
 
@@ -415,10 +436,18 @@ function HomeschoolCard({ record, student, onAddDocument, onClose }) {
       <div className="mt-4 space-y-2">
         {docs.length === 0 && <p className="text-xs text-gray-400">Документы ещё не добавлены.</p>}
         {docs.map((doc) => (
-          <ProtectedFileLink key={doc.id} path={doc.file_path}
-            className="flex items-center justify-between gap-2 bg-gray-50 rounded-lg px-3 py-2 text-xs hover:bg-gray-100 w-full text-left">
-            <span>📎 {doc.title}</span><span className="text-brand-600">Открыть</span>
-          </ProtectedFileLink>
+          <div key={doc.id} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+            <ProtectedFileLink path={doc.file_path}
+              className="flex flex-1 min-w-0 items-center justify-between gap-2 text-xs hover:text-brand-700 text-left">
+              <span className="truncate">📎 {doc.title}</span><span className="text-brand-600 shrink-0">Открыть</span>
+            </ProtectedFileLink>
+            <button type="button" onClick={() => onDeleteDocument(record.id, doc)}
+              className="shrink-0 rounded-md border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+              aria-label={`Удалить документ ${doc.title}`}
+              title="Удалить документ">
+              Удалить
+            </button>
+          </div>
         ))}
       </div>
     </div>

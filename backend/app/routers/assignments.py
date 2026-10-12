@@ -116,6 +116,62 @@ def my_feed(db: Session = Depends(get_db), current_user: models.User = Depends(r
     ).order_by(models.Assignment.deadline).all()
 
 
+
+@router.get("/admin/all")
+def admin_all_assignments(
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_roles("admin")),
+):
+    """Admin oversight: all assignments, including archived/soft-deleted tasks."""
+    items = db.query(models.Assignment).order_by(
+        models.Assignment.created_at.desc(), models.Assignment.id.desc()
+    ).all()
+    result = []
+    for assignment in items:
+        class_room = db.query(models.ClassRoom).filter(
+            models.ClassRoom.id == assignment.class_id
+        ).first()
+        teacher = db.query(models.User).filter(
+            models.User.id == assignment.teacher_id
+        ).first()
+        active_attachments = [
+            {
+                "id": attachment.id,
+                "file_path": attachment.file_path,
+                "original_filename": attachment.original_filename,
+            }
+            for attachment in assignment.attachments
+            if attachment.is_active
+        ]
+        if not active_attachments and assignment.file_path:
+            active_attachments = [{
+                "id": None,
+                "file_path": assignment.file_path,
+                "original_filename": assignment.original_filename or "Материал от учителя",
+            }]
+        result.append({
+            "id": assignment.id,
+            "class_id": assignment.class_id,
+            "class_name": class_room.name if class_room else "Архивный класс",
+            "class_is_active": bool(class_room and class_room.is_active),
+            "teacher_id": assignment.teacher_id,
+            "teacher_name": teacher.full_name if teacher else "Неизвестный учитель",
+            "teacher_email": teacher.email if teacher else "",
+            "subject": assignment.subject or "",
+            "title": assignment.title,
+            "description": assignment.description or "",
+            "deadline": assignment.deadline,
+            "created_at": assignment.created_at,
+            "is_active": bool(assignment.is_active),
+            "deleted_at": assignment.deleted_at,
+            "allow_resubmission": bool(assignment.allow_resubmission),
+            "max_attempts": assignment.max_attempts or 1,
+            "attachments": active_attachments,
+            "submissions_count": len(assignment.submissions),
+        })
+    return result
+
+
 @router.get("/{assignment_id}", response_model=schemas.AssignmentOut)
 def get_assignment(assignment_id: int, db: Session = Depends(get_db),
                    _: models.User = Depends(get_current_user)):

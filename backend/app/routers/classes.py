@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..auth import get_current_user, require_roles
 from ..database import get_db
+from ..events import log_action
 from ..access import teacher_class_ids
 
 router = APIRouter(prefix="/classes", tags=["classes"])
@@ -107,6 +108,9 @@ def create_class(
 
     class_room = models.ClassRoom(name=name, teacher_id=current_user.id, is_active=True)
     db.add(class_room)
+    db.flush()
+    log_action(db, current_user, "create", "class", class_room.id, f"Создан класс «{class_room.name}»",
+               after={"name": class_room.name, "teacher_id": class_room.teacher_id})
     db.commit()
     db.refresh(class_room)
     return class_room
@@ -162,7 +166,10 @@ def update_class(
     if duplicate:
         raise HTTPException(status_code=400, detail="Активный класс с таким названием уже существует")
 
+    previous_name = class_room.name
     class_room.name = name
+    log_action(db, _, "update", "class", class_room.id, f"Переименован класс «{previous_name}» → «{name}»",
+               before={"name": previous_name}, after={"name": name})
     # Для ученика, который всё ещё учится в этом классе, текущий период
     # истории отражает новое название; закрытые периоды не переписываем.
     db.query(models.StudentClassHistory).filter(
@@ -202,6 +209,10 @@ def delete_class(
     class_room.is_active = False
     class_room.archived_at = datetime.utcnow()
     class_room.archived_by = current_user.id
+    log_action(db, current_user, "archive", "class", class_room.id,
+               f"Архивирован класс «{class_room.name}»; учебная история сохранена",
+               before={"name": class_room.name, "is_active": True},
+               after={"name": class_room.name, "is_active": False, "students": len(enrollments)})
     db.commit()
     return {
         "status": "ok",

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import ClassManager from '../components/ClassManager.jsx'
 import LearningTools from '../components/LearningTools.jsx'
+import QuizCenter from '../components/QuizCenter.jsx'
 
 const empty = () => ({subject:'', title:'', description:'', deadline:'', allow_resubmission:true, max_attempts:3})
 const field = 'border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500'
@@ -52,7 +53,7 @@ export default function TeacherDashboard() {
  </article>})}
  {!selectedClass&&<p className="bg-white rounded-xl p-5 text-sm text-gray-500">Выберите класс для управления заданиями.</p>}
  {selectedClass&&assignments.length===0&&<p className="bg-white rounded-xl p-5 text-sm text-gray-500">В этом классе пока нет заданий.</p>}
- </div></div><LearningTools role="teacher"/>
+ </div></div><QuizCenter role="teacher" classId={selectedClass}/><LearningTools role="teacher"/>
  </div>
 }
 function SubmissionRow({submission,studentName,onGrade}){

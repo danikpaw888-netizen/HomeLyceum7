@@ -214,6 +214,7 @@ function StudentQuizCenter() {
   const [busy,setBusy]=useState(false)
   const [now,setNow]=useState(Date.now())
   const submitLock=useRef(false)
+  const autoSubmitTriggered=useRef(false)
 
   async function load() { try { setQuizzes(await api.myQuizzes()) } catch (e) { setError(e.message) } }
   useEffect(()=>{load()},[])
@@ -230,7 +231,7 @@ function StudentQuizCenter() {
     setError('');setNotice('');setLastResult(null);setBusy(true)
     try{
       const attempt=await api.startQuiz(quiz.id)
-      setAnswers({});setActiveQuiz(quiz);setActiveAttempt(attempt);submitLock.current=false;setNow(Date.now())
+      setAnswers({});setActiveQuiz(quiz);setActiveAttempt(attempt);submitLock.current=false;autoSubmitTriggered.current=false;setNow(Date.now())
     }catch(e){setError(e.message);await load()}finally{setBusy(false)}
   }
   async function submit(auto=false) {
@@ -254,7 +255,7 @@ function StudentQuizCenter() {
       return {...prev,[question.id]:{...(prev[question.id]||{}),selected_option_ids:ids}}
     })
   }
-  useEffect(()=>{if(activeAttempt&&remaining===0&&!busy&&!submitLock.current)submit(true)},[remaining,activeAttempt,busy])
+  useEffect(()=>{if(activeAttempt&&remaining===0&&!busy&&!submitLock.current&&!autoSubmitTriggered.current){autoSubmitTriggered.current=true;submit(true)}},[remaining,activeAttempt,busy])
 
   return <section className="mt-5 bg-white rounded-2xl border border-gray-100 shadow-card p-4 sm:p-5">
     <div className="flex items-center justify-between gap-2 mb-4"><div><h2 className="text-lg font-semibold text-gray-800">🧠 Онлайн-тесты и контрольные</h2><p className="text-xs text-gray-500 mt-1">Проходи тесты, следи за временем и смотри результаты.</p></div><button onClick={load} className="text-xs border rounded-lg px-3 py-2">Обновить</button></div>

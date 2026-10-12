@@ -28,7 +28,12 @@ export default function Navbar() {
   return (
     <div className="sticky top-0 z-20 bg-gradient-to-r from-brand-700 via-brand-600 to-brand-500 text-white shadow-md">
       <nav className="px-4 sm:px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+        <NavLink
+          to="/"
+          end
+          aria-label="На главную страницу HomeLyceum7"
+          className="flex items-center gap-3 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
+        >
           <img
             src="/logo.png"
             alt="HomeLyceum7"
@@ -40,7 +45,7 @@ export default function Navbar() {
               Платформа домашнего обучения
             </div>
           </div>
-        </div>
+        </NavLink>
         {user && (
           <div className="flex items-center gap-3 sm:gap-4 text-sm">
             <span className="hidden sm:flex items-center gap-1.5 bg-white/10 px-3 py-1.5 rounded-full">

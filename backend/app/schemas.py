@@ -312,3 +312,129 @@ class HomeschoolCloseIn(BaseModel):
 
 class UserApprovalIn(BaseModel):
     approved: bool
+
+
+# ---------- Онлайн-тесты и контрольные ----------
+
+class QuizOptionCreate(BaseModel):
+    option_text: str
+
+
+class QuizQuestionCreate(BaseModel):
+    question_text: str
+    question_type: Literal["single", "multiple", "text"] = "single"
+    points: int = 1
+    options: List[QuizOptionCreate] = []
+    correct_option_indexes: List[int] = []
+
+
+class QuizCreateIn(BaseModel):
+    class_id: int
+    subject: str = ""
+    title: str
+    description: str = ""
+    deadline: Optional[datetime] = None
+    duration_minutes: Optional[int] = None
+    attempts_allowed: int = 1
+    is_published: bool = True
+    questions: List[QuizQuestionCreate]
+
+
+class QuizOptionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    option_text: str
+    order_index: int
+
+
+class QuizQuestionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    question_text: str
+    question_type: Literal["single", "multiple", "text"]
+    points: int
+    order_index: int
+    options: List[QuizOptionOut] = []
+
+
+class QuizOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    class_id: int
+    teacher_id: int
+    subject: str
+    title: str
+    description: str
+    deadline: Optional[datetime] = None
+    duration_minutes: Optional[int] = None
+    attempts_allowed: int
+    is_published: bool
+    is_active: bool
+    created_at: datetime
+    questions: List[QuizQuestionOut] = []
+
+
+class StudentQuizOut(QuizOut):
+    attempts_used: int = 0
+    latest_attempt_id: Optional[int] = None
+    latest_attempt_status: Optional[str] = None
+    latest_score: Optional[int] = None
+    latest_max_score: Optional[int] = None
+    can_attempt: bool = True
+
+
+class QuizAttemptStartOut(BaseModel):
+    id: int
+    quiz_id: int
+    attempt_number: int
+    status: str
+    started_at: datetime
+    max_score: int
+
+
+class QuizAnswerIn(BaseModel):
+    question_id: int
+    selected_option_ids: List[int] = []
+    text_answer: str = ""
+
+
+class QuizSubmissionIn(BaseModel):
+    answers: List[QuizAnswerIn] = []
+
+
+class QuizAnswerOut(BaseModel):
+    id: int
+    question_id: int
+    question_text: str
+    question_type: str
+    points_available: int
+    selected_option_ids: List[int] = []
+    selected_options: List[str] = []
+    text_answer: str = ""
+    is_correct: Optional[bool] = None
+    points_awarded: int = 0
+    feedback: str = ""
+
+
+class QuizAttemptOut(BaseModel):
+    id: int
+    quiz_id: int
+    student_id: int
+    student_name: Optional[str] = None
+    attempt_number: int
+    status: str
+    started_at: datetime
+    submitted_at: Optional[datetime] = None
+    score: int = 0
+    max_score: int = 0
+    answers: List[QuizAnswerOut] = []
+
+
+class QuizAnswerGradeIn(BaseModel):
+    answer_id: int
+    points_awarded: int
+    feedback: str = ""
+
+
+class QuizAttemptGradeIn(BaseModel):
+    answers: List[QuizAnswerGradeIn] = []

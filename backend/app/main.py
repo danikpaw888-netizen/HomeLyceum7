@@ -2,7 +2,6 @@ from datetime import datetime
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect, text
 
 from .database import Base, engine, SessionLocal
@@ -10,7 +9,7 @@ from .config import settings
 from . import models
 from .auth import hash_password
 from .routers import auth, users, classes, assignments, submissions, schedule, gradebook, homeschool
-from .routers import notifications, calendar, reports, audit
+from .routers import notifications, calendar, reports, audit, files, quizzes
 
 # Создаём таблицы и мягко обновляем прототипную БД без обязательной ручной миграции.
 Base.metadata.create_all(bind=engine)
@@ -180,8 +179,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount(f"/{settings.UPLOAD_DIR}", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
-
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(classes.router)
@@ -194,6 +191,8 @@ app.include_router(notifications.router)
 app.include_router(calendar.router)
 app.include_router(reports.router)
 app.include_router(audit.router)
+app.include_router(files.router)
+app.include_router(quizzes.router)
 
 
 @app.get("/")

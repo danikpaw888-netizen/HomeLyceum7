@@ -235,6 +235,90 @@ class AuditLog(Base):
     actor = relationship("User")
 
 
+
+class Quiz(Base):
+    __tablename__ = "quizzes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    class_id = Column(Integer, ForeignKey("classes.id"), nullable=False, index=True)
+    teacher_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    subject = Column(String(100), default="")
+    title = Column(String(180), nullable=False)
+    description = Column(Text, default="")
+    deadline = Column(DateTime, nullable=True)
+    duration_minutes = Column(Integer, nullable=True)
+    attempts_allowed = Column(Integer, nullable=False, default=1, server_default="1")
+    is_published = Column(Boolean, nullable=False, default=True, server_default="true")
+    is_active = Column(Boolean, nullable=False, default=True, server_default="true")
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    class_room = relationship("ClassRoom")
+    teacher = relationship("User")
+    questions = relationship("QuizQuestion", back_populates="quiz", cascade="all, delete-orphan", order_by="QuizQuestion.order_index")
+    attempts = relationship("QuizAttempt", back_populates="quiz")
+
+
+class QuizQuestion(Base):
+    __tablename__ = "quiz_questions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    quiz_id = Column(Integer, ForeignKey("quizzes.id"), nullable=False, index=True)
+    question_text = Column(Text, nullable=False)
+    question_type = Column(String(20), nullable=False, default="single")
+    points = Column(Integer, nullable=False, default=1)
+    order_index = Column(Integer, nullable=False, default=0)
+
+    quiz = relationship("Quiz", back_populates="questions")
+    options = relationship("QuizOption", back_populates="question", cascade="all, delete-orphan", order_by="QuizOption.order_index")
+    answers = relationship("QuizAnswer", back_populates="question")
+
+
+class QuizOption(Base):
+    __tablename__ = "quiz_options"
+
+    id = Column(Integer, primary_key=True, index=True)
+    question_id = Column(Integer, ForeignKey("quiz_questions.id"), nullable=False, index=True)
+    option_text = Column(Text, nullable=False)
+    is_correct = Column(Boolean, nullable=False, default=False, server_default="false")
+    order_index = Column(Integer, nullable=False, default=0)
+
+    question = relationship("QuizQuestion", back_populates="options")
+
+
+class QuizAttempt(Base):
+    __tablename__ = "quiz_attempts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    quiz_id = Column(Integer, ForeignKey("quizzes.id"), nullable=False, index=True)
+    student_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    attempt_number = Column(Integer, nullable=False, default=1)
+    status = Column(String(30), nullable=False, default="in_progress")
+    started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    submitted_at = Column(DateTime, nullable=True)
+    score = Column(Integer, nullable=False, default=0)
+    max_score = Column(Integer, nullable=False, default=0)
+
+    quiz = relationship("Quiz", back_populates="attempts")
+    student = relationship("User")
+    answers = relationship("QuizAnswer", back_populates="attempt", cascade="all, delete-orphan")
+
+
+class QuizAnswer(Base):
+    __tablename__ = "quiz_answers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    attempt_id = Column(Integer, ForeignKey("quiz_attempts.id"), nullable=False, index=True)
+    question_id = Column(Integer, ForeignKey("quiz_questions.id"), nullable=False, index=True)
+    selected_option_ids = Column(Text, default="[]")
+    text_answer = Column(Text, default="")
+    is_correct = Column(Boolean, nullable=True)
+    points_awarded = Column(Integer, nullable=False, default=0)
+    feedback = Column(Text, default="")
+
+    attempt = relationship("QuizAttempt", back_populates="answers")
+    question = relationship("QuizQuestion", back_populates="answers")
+
+
 class GradeEntry(Base):
     """Оценка, поставленная учителем напрямую в журнале (не за конкретное ДЗ)."""
     __tablename__ = "grade_entries"

@@ -18,9 +18,15 @@ const statusText = (status) => ({
   expired: 'Время истекло',
 }[status] || status || 'Не начат')
 
+function parseUtcDate(value) {
+  if (!value) return null
+  const text = String(value)
+  // API timestamps without an offset come from datetime.utcnow() and are UTC.
+  return new Date(/(?:Z|[+-]\\d{2}:\\d{2})$/i.test(text) ? text : `${text}Z`)
+}
 function formatDate(value) {
   if (!value) return 'Без срока'
-  return new Date(value).toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short' })
+  return parseUtcDate(value).toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short' })
 }
 function durationLabel(seconds) {
   const total = Math.max(0, Math.floor(seconds))
@@ -224,7 +230,7 @@ function StudentQuizCenter() {
     return ()=>window.clearInterval(timer)
   },[activeAttempt?.id])
   const remaining = activeQuiz&&activeAttempt&&activeQuiz.duration_minutes
-    ? Math.max(0,Math.ceil((new Date(activeAttempt.started_at).getTime()+activeQuiz.duration_minutes*60000-now)/1000))
+    ? Math.max(0,Math.ceil((parseUtcDate(activeAttempt.started_at).getTime()+activeQuiz.duration_minutes*60000-now)/1000))
     : null
 
   async function start(quiz) {

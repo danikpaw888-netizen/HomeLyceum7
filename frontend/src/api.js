@@ -183,7 +183,37 @@ export const api = {
   auditLogs(limit = 100) { return request(`/audit/?limit=${limit}`) },
 
   fileUrl(path) {
-    return path ? `${API_URL}${path}` : null
+    if (!path) return null
+    // Stored upload paths stay backward-compatible in the DB, but the public
+    // /uploads mount is gone. Every file request goes through permission checks.
+    const safePath = path.replace(/^\\/uploads\\//, '/files/')
+    return `${API_URL.replace(/\\/$/, '')}${safePath.startsWith('/') ? safePath : `/${safePath}`}`
+  },
+
+  // --- online quizzes ---
+  createQuiz(payload) {
+    return request('/quizzes/', { method: 'POST', body: payload })
+  },
+  classQuizzes(classId) {
+    return request(`/quizzes/class/${classId}`)
+  },
+  myQuizzes() {
+    return request('/quizzes/my')
+  },
+  startQuiz(quizId) {
+    return request(`/quizzes/${quizId}/attempts`, { method: 'POST' })
+  },
+  submitQuizAttempt(attemptId, answers) {
+    return request(`/quizzes/attempts/${attemptId}/submit`, { method: 'PUT', body: { answers } })
+  },
+  quizAttempts(quizId) {
+    return request(`/quizzes/${quizId}/attempts`)
+  },
+  gradeQuizAttempt(attemptId, answers) {
+    return request(`/quizzes/attempts/${attemptId}/grade`, { method: 'PUT', body: { answers } })
+  },
+  deactivateQuiz(quizId) {
+    return request(`/quizzes/${quizId}`, { method: 'DELETE' })
   },
 
   // --- gradebook (журнал: оценки, посещаемость, ростер класса) ---

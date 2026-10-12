@@ -25,6 +25,14 @@ export default function AdminDashboard() {
   const [studentId, setStudentId] = useState('')
   const [records, setRecords] = useState([])
   const [selectedStudent, setSelectedStudent] = useState('')
+  const [allAssignments, setAllAssignments] = useState([])
+  const [assignmentSearch, setAssignmentSearch] = useState('')
+  const [assignmentClassFilter, setAssignmentClassFilter] = useState('all')
+  const [assignmentTeacherFilter, setAssignmentTeacherFilter] = useState('all')
+  const [assignmentStatusFilter, setAssignmentStatusFilter] = useState('all')
+  const [openAssignmentId, setOpenAssignmentId] = useState(null)
+  const [submissionsByAssignment, setSubmissionsByAssignment] = useState({})
+  const [loadingAssignmentId, setLoadingAssignmentId] = useState(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
@@ -86,10 +94,75 @@ export default function AdminDashboard() {
     return () => clearInterval(timer)
   }, [])
 
+  useEffect(() => {
+    if (tab === 'assignments') loadAllAssignments()
+  }, [tab])
+
   const activeRecords = useMemo(
     () => records.filter((r) => !r.end_date),
     [records],
   )
+  async function loadAllAssignments() {
+    setError('')
+    try {
+      setAllAssignments(await api.adminAssignments())
+    } catch (err) {
+      setError(`Не удалось загрузить задания учителей: ${err.message}`)
+    }
+  }
+
+  async function toggleAssignmentSubmissions(assignmentId) {
+    if (openAssignmentId === assignmentId) {
+      setOpenAssignmentId(null)
+      return
+    }
+    setOpenAssignmentId(assignmentId)
+    if (Object.prototype.hasOwnProperty.call(submissionsByAssignment, assignmentId)) return
+    setLoadingAssignmentId(assignmentId)
+    try {
+      const submissions = await api.submissionsForAssignment(assignmentId)
+      setSubmissionsByAssignment((prev) => ({ ...prev, [assignmentId]: submissions }))
+    } catch (err) {
+      setError(`Не удалось загрузить сданные работы: ${err.message}`)
+    } finally {
+      setLoadingAssignmentId(null)
+    }
+  }
+
+  const assignmentClasses = useMemo(() => {
+    const unique = new Map()
+    allAssignments.forEach((item) => unique.set(String(item.class_id), {
+      id: item.class_id,
+      name: item.class_name || `Класс #${item.class_id}`,
+    }))
+    return [...unique.values()].sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+  }, [allAssignments])
+
+  const assignmentTeachers = useMemo(() => {
+    const unique = new Map()
+    allAssignments.forEach((item) => unique.set(String(item.teacher_id), {
+      id: item.teacher_id,
+      name: item.teacher_name || `Учитель #${item.teacher_id}`,
+    }))
+    return [...unique.values()].sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+  }, [allAssignments])
+
+  const visibleAssignments = useMemo(() => {
+    const query = assignmentSearch.trim().toLocaleLowerCase('ru')
+    return allAssignments.filter((item) => {
+      const searchable = [
+        item.title, item.subject, item.description, item.teacher_name,
+        item.teacher_email, item.class_name,
+      ].join(' ').toLocaleLowerCase('ru')
+      const matchesQuery = !query || searchable.includes(query)
+      const matchesClass = assignmentClassFilter === 'all' || String(item.class_id) === assignmentClassFilter
+      const matchesTeacher = assignmentTeacherFilter === 'all' || String(item.teacher_id) === assignmentTeacherFilter
+      const matchesStatus = assignmentStatusFilter === 'all'
+        || (assignmentStatusFilter === 'active' ? item.is_active : !item.is_active)
+      return matchesQuery && matchesClass && matchesTeacher && matchesStatus
+    })
+  }, [allAssignments, assignmentSearch, assignmentClassFilter, assignmentTeacherFilter, assignmentStatusFilter])
+
 
   async function approve(userId, approved) {
     setError('')
@@ -212,6 +285,7 @@ export default function AdminDashboard() {
     ['parents', '👨‍👩‍👧 Связи'],
     ['classes', '🏫 Классы'],
     ['accounts', '👥 Аккаунты'],
+    ['assignments', `📚 Задания учителей${allAssignments.length ? ` (${allAssignments.length})` : ''}`],
   ]
 
   return (
@@ -391,6 +465,148 @@ export default function AdminDashboard() {
           )}
         </section>
       )}
+
+      {tab === 'assignments' && (
+        <section className="bg-white rounded-2xl shadow-card p-4 sm:p-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+            <div>
+              <h2 className="font-semibold text-gray-800">Задания всех учителей</h2>
+              <p className="text-xs text-gray-500 mt-1">Просмотр условий, материалов и сданных работ. Архивные задания тоже доступны.</p>
+            </div>
+            <button onClick={loadAllAssignments} className="border border-gray-200 rounded-lg px-3 py-2 text-sm hover:bg-gray-50">Обновить</button>
+          </div>
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-4">
+            <input value={assignmentSearch} onChange={(e) => setAssignmentSearch(e.target.value)}
+              placeholder="Поиск по заданию, предмету, учителю…" className="field sm:col-span-2" />
+            <select value={assignmentClassFilter} onChange={(e) => setAssignmentClassFilter(e.target.value)} className="field">
+              <option value="all">Все классы</option>
+              {assignmentClasses.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+            <select value={assignmentTeacherFilter} onChange={(e) => setAssignmentTeacherFilter(e.target.value)} className="field">
+              <option value="all">Все учителя</option>
+              {assignmentTeachers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+            <select value={assignmentStatusFilter} onChange={(e) => setAssignmentStatusFilter(e.target.value)} className="field">
+              <option value="all">Активные и архивные</option>
+              <option value="active">Только активные</option>
+              <option value="archived">Только архивные</option>
+            </select>
+          </div>
+
+          <div className="flex flex-wrap gap-2 text-xs text-gray-500 mb-4">
+            <span className="rounded-full bg-gray-100 px-3 py-1.5">Всего заданий: {allAssignments.length}</span>
+            <span className="rounded-full bg-emerald-50 text-emerald-700 px-3 py-1.5">Активных: {allAssignments.filter((a) => a.is_active).length}</span>
+            <span className="rounded-full bg-gray-100 px-3 py-1.5">Сданных работ: {allAssignments.reduce((sum, a) => sum + (a.submissions_count || 0), 0)}</span>
+          </div>
+
+          {!allAssignments.length ? (
+            <Empty text="Заданий пока нет или список ещё загружается. Нажми «Обновить», чтобы проверить ещё раз." />
+          ) : !visibleAssignments.length ? (
+            <Empty text="По выбранным фильтрам заданий нет." />
+          ) : (
+            <div className="space-y-3">
+              {visibleAssignments.map((assignment) => {
+                const attachments = assignment.attachments || []
+                const submissions = submissionsByAssignment[assignment.id]
+                const expanded = openAssignmentId === assignment.id
+                return (
+                  <article key={assignment.id} className="rounded-xl border border-gray-100 overflow-hidden">
+                    <div className="p-4">
+                      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-brand-700">{assignment.subject || 'Без предмета'}</span>
+                            <span className="text-xs rounded-full bg-gray-100 text-gray-600 px-2 py-1">{assignment.class_name}</span>
+                            <span className={`text-xs rounded-full px-2 py-1 ${assignment.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                              {assignment.is_active ? 'Активное задание' : 'Архив / удалено'}
+                            </span>
+                          </div>
+                          <h3 className="font-semibold text-gray-800">{assignment.title}</h3>
+                          {assignment.description && <p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">{assignment.description}</p>}
+                          <div className="grid sm:grid-cols-2 gap-x-4 gap-y-1 mt-3 text-xs text-gray-500">
+                            <p><span className="font-medium text-gray-700">Учитель:</span> {assignment.teacher_name}{assignment.teacher_email ? ` · ${assignment.teacher_email}` : ''}</p>
+                            <p><span className="font-medium text-gray-700">Класс:</span> {assignment.class_name}{assignment.class_is_active ? '' : ' (архивный)'}</p>
+                            <p><span className="font-medium text-gray-700">Создано:</span> {assignment.created_at ? new Date(assignment.created_at).toLocaleString('ru-RU') : '—'}</p>
+                            <p><span className="font-medium text-gray-700">Срок сдачи:</span> {assignment.deadline ? new Date(assignment.deadline).toLocaleString('ru-RU') : 'Без срока'}</p>
+                            <p><span className="font-medium text-gray-700">Повторная сдача:</span> {assignment.allow_resubmission ? `до ${assignment.max_attempts || 1} попыток` : 'нет'}</p>
+                            <p><span className="font-medium text-gray-700">Сдано работ:</span> {assignment.submissions_count || 0}</p>
+                          </div>
+                          {attachments.length > 0 && (
+                            <div className="mt-3">
+                              <p className="text-xs font-medium text-gray-600 mb-1.5">Материалы учителя</p>
+                              <div className="flex flex-wrap gap-2">
+                                {attachments.map((file, index) => (
+                                  <ProtectedFileLink key={file.id || file.file_path || index} path={file.file_path}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-brand-100 bg-brand-50 px-2.5 py-1.5 text-xs text-brand-700 hover:bg-brand-100">
+                                    📎 {file.original_filename || 'Вложение'}
+                                  </ProtectedFileLink>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {!attachments.length && <p className="text-xs text-gray-400 mt-2">Материалы не прикреплены.</p>}
+                        </div>
+                        <button onClick={() => toggleAssignmentSubmissions(assignment.id)}
+                          className="shrink-0 rounded-lg border border-brand-100 bg-brand-50 text-brand-700 px-3 py-2 text-sm hover:bg-brand-100">
+                          {loadingAssignmentId === assignment.id ? 'Загрузка…' : expanded ? 'Скрыть работы' : `Посмотреть работы (${assignment.submissions_count || 0})`}
+                        </button>
+                      </div>
+                    </div>
+                    {expanded && (
+                      <div className="border-t border-gray-100 bg-gray-50/70 p-4">
+                        <h4 className="text-sm font-semibold text-gray-800 mb-3">Работы учеников</h4>
+                        {loadingAssignmentId === assignment.id && !submissions ? (
+                          <p className="text-sm text-gray-500">Загружаем сданные работы…</p>
+                        ) : !submissions?.length ? (
+                          <p className="text-sm text-gray-500">Пока никто не сдал это задание.</p>
+                        ) : (
+                          <div className="space-y-3">
+                            {submissions.map((submission) => {
+                              const student = students.find((item) => item.id === submission.student_id)
+                              const currentFiles = (submission.attachments || []).filter((file) => file.is_current)
+                              const studentFiles = currentFiles.length ? currentFiles : (submission.file_path ? [{ file_path: submission.file_path, original_filename: submission.original_filename }] : [])
+                              return (
+                                <div key={submission.id} className="rounded-lg border border-gray-200 bg-white p-3">
+                                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                                    <div>
+                                      <p className="text-sm font-semibold text-gray-800">{student?.full_name || `Ученик #${submission.student_id}`}</p>
+                                      <p className="text-xs text-gray-500 mt-1">
+                                        Сдано: {submission.submitted_at ? new Date(submission.submitted_at).toLocaleString('ru-RU') : '—'}
+                                        {' · '}Попытка: {submission.attempt_count || 1}
+                                      </p>
+                                      <p className="text-xs text-gray-600 mt-1">{submission.comment || 'Комментарий ученика отсутствует'}</p>
+                                    </div>
+                                    <span className={`self-start text-sm font-semibold rounded-lg px-3 py-1.5 ${submission.grade != null ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                                      {submission.grade != null ? `Оценка: ${submission.grade}/10` : 'Ожидает оценки'}
+                                    </span>
+                                  </div>
+                                  {submission.teacher_feedback && <p className="text-xs text-gray-600 mt-2">Комментарий учителя: {submission.teacher_feedback}</p>}
+                                  {studentFiles.length > 0 && (
+                                    <div className="flex flex-wrap gap-2 mt-3">
+                                      {studentFiles.map((file, index) => (
+                                        <ProtectedFileLink key={file.id || file.file_path || index} path={file.file_path}
+                                          className="text-xs text-brand-700 underline underline-offset-2">
+                                          📎 {file.original_filename || 'Файл ученика'}
+                                        </ProtectedFileLink>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </article>
+                )
+              })}
+            </div>
+          )}
+        </section>
+      )}
+
       <LearningTools role="admin" />
     </div>
   )

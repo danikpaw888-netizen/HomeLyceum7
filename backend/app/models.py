@@ -122,10 +122,28 @@ class Assignment(Base):
     deadline = Column(DateTime, nullable=False)
     file_path = Column(String(500), nullable=True)
     original_filename = Column(String(255), nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True, server_default="true")
+    deleted_at = Column(DateTime, nullable=True)
+    allow_resubmission = Column(Boolean, nullable=False, default=True, server_default="true")
+    max_attempts = Column(Integer, nullable=False, default=3, server_default="3")
     created_at = Column(DateTime, default=datetime.utcnow)
 
     class_room = relationship("ClassRoom", back_populates="assignments")
     submissions = relationship("Submission", back_populates="assignment")
+    attachments = relationship("AssignmentAttachment", back_populates="assignment", cascade="all, delete-orphan")
+
+
+class AssignmentAttachment(Base):
+    __tablename__ = "assignment_attachments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    assignment_id = Column(Integer, ForeignKey("assignments.id"), nullable=False, index=True)
+    file_path = Column(String(500), nullable=False)
+    original_filename = Column(String(255), nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True, server_default="true")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    assignment = relationship("Assignment", back_populates="attachments")
 
 
 class Submission(Base):
@@ -142,9 +160,79 @@ class Submission(Base):
     teacher_feedback = Column(Text, default="")
     submitted_at = Column(DateTime, default=datetime.utcnow)
     graded_at = Column(DateTime, nullable=True)
+    attempt_count = Column(Integer, nullable=False, default=1, server_default="1")
 
     assignment = relationship("Assignment", back_populates="submissions")
     student = relationship("User")
+    attachments = relationship("SubmissionAttachment", back_populates="submission", cascade="all, delete-orphan")
+    attempts = relationship("SubmissionAttempt", back_populates="submission", cascade="all, delete-orphan")
+
+
+class SubmissionAttachment(Base):
+    __tablename__ = "submission_attachments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    submission_id = Column(Integer, ForeignKey("submissions.id"), nullable=False, index=True)
+    file_path = Column(String(500), nullable=False)
+    original_filename = Column(String(255), nullable=False)
+    is_current = Column(Boolean, nullable=False, default=True, server_default="true")
+    attempt_number = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    submission = relationship("Submission", back_populates="attachments")
+
+
+class SubmissionAttempt(Base):
+    __tablename__ = "submission_attempts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    submission_id = Column(Integer, ForeignKey("submissions.id"), nullable=False, index=True)
+    attempt_number = Column(Integer, nullable=False)
+    file_path = Column(String(500), nullable=True)
+    original_filename = Column(String(255), nullable=True)
+    comment = Column(Text, default="")
+    grade = Column(Integer, nullable=True)
+    teacher_feedback = Column(Text, default="")
+    submitted_at = Column(DateTime, nullable=True)
+    graded_at = Column(DateTime, nullable=True)
+    attachments_json = Column(Text, default="[]")
+    archived_at = Column(DateTime, default=datetime.utcnow)
+
+    submission = relationship("Submission", back_populates="attempts")
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    __table_args__ = (UniqueConstraint("dedupe_key", name="uq_notification_dedupe_key"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    notification_type = Column(String(40), nullable=False, default="info")
+    title = Column(String(180), nullable=False)
+    message = Column(Text, nullable=False)
+    link = Column(String(250), nullable=True)
+    dedupe_key = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    read_at = Column(DateTime, nullable=True)
+
+    user = relationship("User")
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    actor_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    actor_name = Column(String(100), nullable=False, default="Система")
+    action = Column(String(60), nullable=False)
+    entity_type = Column(String(60), nullable=False)
+    entity_id = Column(Integer, nullable=True)
+    details = Column(Text, default="")
+    before_json = Column(Text, nullable=True)
+    after_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    actor = relationship("User")
 
 
 class GradeEntry(Base):

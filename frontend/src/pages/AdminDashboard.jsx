@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { api } from '../api.js'
 import ClassManager from '../components/ClassManager.jsx'
 import LearningTools from '../components/LearningTools.jsx'
+import ProtectedFileLink from '../components/ProtectedFileLink.jsx'
 
 const DOC_TYPES = [
   ['order', 'Приказ о переводе'],
@@ -414,10 +415,10 @@ function HomeschoolCard({ record, student, onAddDocument, onClose }) {
       <div className="mt-4 space-y-2">
         {docs.length === 0 && <p className="text-xs text-gray-400">Документы ещё не добавлены.</p>}
         {docs.map((doc) => (
-          <a key={doc.id} href={api.fileUrl(doc.file_path)} target="_blank" rel="noreferrer"
-            className="flex items-center justify-between gap-2 bg-gray-50 rounded-lg px-3 py-2 text-xs hover:bg-gray-100">
+          <ProtectedFileLink key={doc.id} path={doc.file_path}
+            className="flex items-center justify-between gap-2 bg-gray-50 rounded-lg px-3 py-2 text-xs hover:bg-gray-100 w-full text-left">
             <span>📎 {doc.title}</span><span className="text-brand-600">Открыть</span>
-          </a>
+          </ProtectedFileLink>
         ))}
       </div>
     </div>

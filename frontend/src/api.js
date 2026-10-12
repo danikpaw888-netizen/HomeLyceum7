@@ -116,6 +116,9 @@ export const api = {
   listClassAssignments(classId) {
     return request(`/assignments/class/${classId}`)
   },
+  adminAssignments() {
+    return request('/assignments/admin/all')
+  },
   myFeed() {
     return request('/assignments/my/feed')
   },

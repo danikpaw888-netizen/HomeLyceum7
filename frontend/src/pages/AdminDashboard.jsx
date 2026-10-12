@@ -17,6 +17,7 @@ const today = () => new Date().toISOString().slice(0, 10)
 export default function AdminDashboard() {
   const [tab, setTab] = useState('requests')
   const [pending, setPending] = useState([])
+  const [accounts, setAccounts] = useState([])
   const [parents, setParents] = useState([])
   const [students, setStudents] = useState([])
   const [parentId, setParentId] = useState('')
@@ -49,10 +50,38 @@ export default function AdminDashboard() {
     }
   }
 
+  async function loadAccounts() {
+    try {
+      setAccounts(await api.adminAccounts())
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function deactivateAccount(account) {
+    const confirmed = window.confirm(
+      `Отключить аккаунт «${account.full_name}» (${account.email})? Вход будет запрещён. Учебная история и оценки сохранятся.`
+    )
+    if (!confirmed) return
+    setError('')
+    setMessage('')
+    try {
+      await api.deactivateAccount(account.id)
+      setAccounts((prev) => prev.filter((item) => item.id !== account.id))
+      setPending((prev) => prev.filter((item) => item.id !== account.id))
+      setParents((prev) => prev.filter((item) => item.id !== account.id))
+      setStudents((prev) => prev.filter((item) => item.id !== account.id))
+      setMessage('Аккаунт отключён. Учебная история сохранена.')
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   useEffect(() => {
     loadCore()
     loadPending()
-    const timer = setInterval(loadPending, 3000)
+    loadAccounts()
+    const timer = setInterval(() => { loadPending(); loadAccounts() }, 5000)
     return () => clearInterval(timer)
   }, [])
 
@@ -159,6 +188,7 @@ export default function AdminDashboard() {
     ['homeschool', '🏠 Домашнее обучение'],
     ['parents', '👨‍👩‍👧 Связи'],
     ['classes', '🏫 Классы'],
+    ['accounts', '👥 Аккаунты'],
   ]
 
   return (
@@ -302,6 +332,41 @@ export default function AdminDashboard() {
       )}
 
       {tab === 'classes' && <ClassManager />}
+
+      {tab === 'accounts' && (
+        <section className="bg-white rounded-2xl shadow-card p-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+            <div>
+              <h2 className="font-semibold text-gray-800">Управление аккаунтами</h2>
+              <p className="text-xs text-gray-500 mt-1">Отключение запрещает вход, но сохраняет оценки, работы и учебную историю.</p>
+            </div>
+            <button onClick={loadAccounts} className="border border-gray-200 rounded-lg px-3 py-2 text-sm hover:bg-gray-50">Обновить список</button>
+          </div>
+          {accounts.length === 0 ? <Empty text="Активных аккаунтов нет." /> : (
+            <div className="space-y-2">
+              {accounts.map((account) => (
+                <div key={account.id} className="border border-gray-100 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-gray-800">{account.full_name}</p>
+                    <p className="text-sm text-gray-500 break-all">{account.email}</p>
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                      <span className="text-xs rounded-full bg-gray-100 px-2 py-1 text-gray-600">{roleName(account.role)}</span>
+                      <span className={`text-xs rounded-full px-2 py-1 ${account.approval_status === 'approved' ? 'bg-emerald-50 text-emerald-700' : account.approval_status === 'pending' ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700'}`}>
+                        {account.approval_status === 'approved' ? 'Активен' : account.approval_status === 'pending' ? 'Ожидает одобрения' : account.approval_status === 'rejected' ? 'Отклонён' : 'Отключён'}
+                      </span>
+                    </div>
+                  </div>
+                  {account.role !== 'admin' && account.approval_status !== 'deleted' && (
+                    <button onClick={() => deactivateAccount(account)} className="self-start sm:self-auto shrink-0 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg px-3 py-2 text-sm font-medium">
+                      Отключить аккаунт
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
       <LearningTools role="admin" />
     </div>
   )

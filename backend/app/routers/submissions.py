@@ -12,6 +12,7 @@ from ..auth import get_current_user, require_roles
 from ..config import settings
 from ..database import get_db
 from ..events import log_action, notify_student_and_parents, notify_users
+from ..access import norm_subject, teacher_subjects_in_class
 
 router = APIRouter(prefix="/submissions", tags=["submissions"])
 ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx", ".txt", ".jpg", ".jpeg", ".png", ".heic", ".zip", ".rar", ".xlsx", ".xls", ".ppt", ".pptx"}
@@ -126,7 +127,17 @@ async def submit_homework(
 
 @router.get("/assignment/{assignment_id}", response_model=List[schemas.SubmissionOut])
 def list_submissions_for_assignment(assignment_id: int, db: Session = Depends(get_db),
-                                    _: models.User = Depends(require_roles("teacher", "admin"))):
+                                    current_user: models.User = Depends(require_roles("teacher", "admin"))):
+    assignment = db.query(models.Assignment).filter(
+        models.Assignment.id == assignment_id
+    ).first()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Задание не найдено")
+    role = current_user.role.value if hasattr(current_user.role, "value") else current_user.role
+    if role == "teacher" and norm_subject(assignment.subject) not in teacher_subjects_in_class(
+        db, current_user.id, assignment.class_id
+    ):
+        raise HTTPException(status_code=403, detail="Проверять можно только задания по вашим предметам")
     return db.query(models.Submission).filter(models.Submission.assignment_id == assignment_id).all()
 
 
@@ -153,6 +164,14 @@ def grade_submission(submission_id: int, grade_in: schemas.GradeIn, db: Session 
     submission = db.query(models.Submission).filter(models.Submission.id == submission_id).first()
     if not submission:
         raise HTTPException(status_code=404, detail="Работа не найдена")
+    role = current_user.role.value if hasattr(current_user.role, "value") else current_user.role
+    assignment = submission.assignment
+    if role == "teacher" and (
+        assignment is None or norm_subject(assignment.subject) not in teacher_subjects_in_class(
+            db, current_user.id, assignment.class_id
+        )
+    ):
+        raise HTTPException(status_code=403, detail="Проверять и оценивать можно только задания по вашим предметам")
     if not (1 <= grade_in.grade <= 10):
         raise HTTPException(status_code=400, detail="Оценка должна быть от 1 до 10")
     before = {"grade": submission.grade, "teacher_feedback": submission.teacher_feedback}

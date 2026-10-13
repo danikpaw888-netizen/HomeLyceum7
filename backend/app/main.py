@@ -112,7 +112,8 @@ def migrate_schema():
             assignment = submission.assignment
             if linked_grade or not assignment:
                 continue
-            graded_date = submission.graded_at or submission.submitted_at or datetime.utcnow()
+            # Calendar displays assignments by deadline; use that same date for journal grades.
+            graded_date = assignment.deadline
             journal_comment = f"Домашнее задание: {assignment.title}"
             if submission.teacher_feedback:
                 journal_comment += f"\\nКомментарий учителя: {submission.teacher_feedback}"
@@ -126,6 +127,20 @@ def migrate_schema():
                 comment=journal_comment,
                 submission_id=submission.id,
             ))
+        # Repair existing linked homework grades that were stamped with the grading date.
+        # Ordinary journal marks (submission_id IS NULL) are intentionally untouched.
+        db.execute(
+            text(
+                "UPDATE grade_entries SET date = ("
+                "SELECT date(assignments.deadline) FROM submissions "
+                "JOIN assignments ON assignments.id = submissions.assignment_id "
+                "WHERE submissions.id = grade_entries.submission_id"
+                ") WHERE submission_id IS NOT NULL AND EXISTS ("
+                "SELECT 1 FROM submissions JOIN assignments ON assignments.id = submissions.assignment_id "
+                "WHERE submissions.id = grade_entries.submission_id AND assignments.deadline IS NOT NULL"
+                ")"
+            )
+        )
         db.commit()
     finally:
         db.close()

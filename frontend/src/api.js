@@ -131,24 +131,26 @@ export const api = {
   myFeed() {
     return request('/assignments/my/feed')
   },
-  createAssignment({ class_id, subject, title, description, deadline, files = [], allow_resubmission = true, max_attempts = 3 }) {
+  createAssignment({ class_id, subject, title, description, deadline, created_at, files = [], allow_resubmission = true, max_attempts = 3 }) {
     const form = new FormData()
     form.append('class_id', class_id)
     form.append('subject', subject || '')
     form.append('title', title)
     form.append('description', description || '')
     form.append('deadline', deadline)
+    if (created_at) form.append('created_at', created_at)
     form.append('allow_resubmission', String(allow_resubmission))
     form.append('max_attempts', String(max_attempts))
     for (const file of files) if (file) form.append('files', file)
     return request('/assignments/', { method: 'POST', body: form, isForm: true })
   },
-  updateAssignment(assignmentId, { subject, title, description, deadline, files = [], keep_attachment_ids = [], allow_resubmission = true, max_attempts = 3 }) {
+  updateAssignment(assignmentId, { subject, title, description, deadline, created_at, files = [], keep_attachment_ids = [], allow_resubmission = true, max_attempts = 3 }) {
     const form = new FormData()
     form.append('subject', subject || '')
     form.append('title', title)
     form.append('description', description || '')
     form.append('deadline', deadline)
+    if (created_at) form.append('created_at', created_at)
     form.append('allow_resubmission', String(allow_resubmission))
     form.append('max_attempts', String(max_attempts))
     form.append('keep_attachment_ids', keep_attachment_ids.join(','))

@@ -1,6 +1,6 @@
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
@@ -16,6 +16,12 @@ router = APIRouter(prefix="/assignments", tags=["assignments"])
 ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx", ".txt", ".jpg", ".jpeg", ".png", ".heic", ".zip", ".rar", ".xlsx", ".xls", ".ppt", ".pptx"}
 MAX_FILE_SIZE = 20 * 1024 * 1024
 MAX_FILES = 10
+
+
+def _normalize_assignment_datetime(value: Optional[datetime]) -> Optional[datetime]:
+    if value is not None and value.tzinfo is not None:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
 
 
 def _incoming(files: Optional[List[UploadFile]], file: Optional[UploadFile]) -> List[UploadFile]:
@@ -56,6 +62,7 @@ def _owned_or_admin(assignment: models.Assignment, user: models.User) -> None:
 async def create_assignment(
     class_id: int = Form(...), subject: str = Form(""), title: str = Form(...),
     description: str = Form(""), deadline: datetime = Form(...),
+    created_at: Optional[datetime] = Form(None),
     allow_resubmission: bool = Form(True), max_attempts: int = Form(3),
     file: Optional[UploadFile] = File(None), files: Optional[List[UploadFile]] = File(None),
     db: Session = Depends(get_db),
@@ -71,9 +78,11 @@ async def create_assignment(
     if not 1 <= max_attempts <= 20:
         raise HTTPException(status_code=400, detail="Число попыток должно быть от 1 до 20")
     uploads = await _save_uploads(_incoming(files, file))
+    issue_date = _normalize_assignment_datetime(created_at) or datetime.utcnow()
     assignment = models.Assignment(
         class_id=class_id, teacher_id=current_user.id, subject=subject.strip(), title=title.strip(),
-        description=description.strip(), deadline=deadline, allow_resubmission=allow_resubmission,
+        description=description.strip(), deadline=deadline, created_at=issue_date,
+        allow_resubmission=allow_resubmission,
         max_attempts=max_attempts if allow_resubmission else 1,
         file_path=uploads[0]["file_path"] if uploads else None,
         original_filename=uploads[0]["original_filename"] if uploads else None, is_active=True,
@@ -258,6 +267,7 @@ def get_assignment(assignment_id: int, db: Session = Depends(get_db),
 async def update_assignment(
     assignment_id: int, title: str = Form(...), subject: str = Form(""),
     description: str = Form(""), deadline: datetime = Form(...),
+    created_at: Optional[datetime] = Form(None),
     allow_resubmission: bool = Form(True), max_attempts: int = Form(3),
     keep_attachment_ids: str = Form("preserve"),
     file: Optional[UploadFile] = File(None), files: Optional[List[UploadFile]] = File(None),
@@ -276,8 +286,8 @@ async def update_assignment(
         raise HTTPException(status_code=400, detail="Число попыток должно быть от 1 до 20")
 
     before = {"title": item.title, "subject": item.subject, "description": item.description,
-              "deadline": item.deadline, "allow_resubmission": item.allow_resubmission,
-              "max_attempts": item.max_attempts}
+              "deadline": item.deadline, "created_at": item.created_at,
+              "allow_resubmission": item.allow_resubmission, "max_attempts": item.max_attempts}
     current = [a for a in item.attachments if a.is_active]
     if keep_attachment_ids == "preserve":
         keep_ids = {a.id for a in current}
@@ -301,6 +311,8 @@ async def update_assignment(
     item.title = title.strip()
     item.description = description.strip()
     item.deadline = deadline
+    if created_at is not None:
+        item.created_at = _normalize_assignment_datetime(created_at)
     item.allow_resubmission = allow_resubmission
     item.max_attempts = max_attempts if allow_resubmission else 1
     for upload in uploads:
@@ -315,7 +327,8 @@ async def update_assignment(
         item.file_path, item.original_filename = None, None
     log_action(db, current_user, "update", "assignment", item.id, f"Изменено задание «{item.title}»",
                before=before, after={"title": item.title, "subject": item.subject, "description": item.description,
-                                     "deadline": deadline, "allow_resubmission": allow_resubmission,
+                                     "deadline": deadline, "created_at": item.created_at,
+                                     "allow_resubmission": allow_resubmission,
                                      "max_attempts": item.max_attempts,
                                      "new_files": [x["original_filename"] for x in uploads]})
     students = [e.student_id for e in db.query(models.Enrollment).filter(

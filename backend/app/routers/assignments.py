@@ -188,11 +188,6 @@ async def replace_assignment_attachment(
     if not assignment:
         raise HTTPException(status_code=404, detail="Задание не найдено")
 
-    uploads = await _save_uploads([file])
-    if not uploads:
-        raise HTTPException(status_code=400, detail="Выбери файл для загрузки")
-    new_file = uploads[0]
-
     attachment = None
     if attachment_id:
         attachment = db.query(models.AssignmentAttachment).filter(
@@ -201,12 +196,18 @@ async def replace_assignment_attachment(
         ).first()
         if not attachment:
             raise HTTPException(status_code=404, detail="Вложение не найдено в этом задании")
+
+    uploads = await _save_uploads([file])
+    if not uploads:
+        raise HTTPException(status_code=400, detail="Выбери файл для загрузки")
+    new_file = uploads[0]
+
+    if attachment:
         old_path = attachment.file_path
         old_name = attachment.original_filename
         attachment.file_path = new_file["file_path"]
         attachment.original_filename = new_file["original_filename"]
         attachment.is_active = True
-        result_id = attachment.id
     else:
         # Legacy assignments may only have the original file_path columns.
         old_path = assignment.file_path
@@ -219,14 +220,13 @@ async def replace_assignment_attachment(
         )
         db.add(attachment)
         db.flush()
-        result_id = attachment.id
 
     if not assignment.file_path or assignment.file_path == old_path:
         assignment.file_path = new_file["file_path"]
         assignment.original_filename = new_file["original_filename"]
 
     log_action(
-        db, current_user, "replace_attachment", "assignment_attachment", result_id,
+        db, current_user, "replace_attachment", "assignment_attachment", attachment.id,
         f"Администратор заменил вложение задания «{assignment.title}»",
         before={"file_path": old_path, "original_filename": old_name},
         after={"file_path": new_file["file_path"], "original_filename": new_file["original_filename"],

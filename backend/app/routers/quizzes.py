@@ -9,6 +9,7 @@ from .. import models, schemas
 from ..auth import get_current_user, require_roles
 from ..database import get_db
 from ..events import log_action, notify_student_and_parents, notify_users
+from ..access import norm_subject, teacher_subjects_in_class
 
 router = APIRouter(prefix="/quizzes", tags=["online quizzes"])
 
@@ -101,13 +102,15 @@ def create_quiz(
     current_user: models.User = Depends(require_roles("teacher", "admin")),
 ):
     room = _class_or_404(db, quiz_in.class_id)
-    if _role(current_user) == "teacher" and not (
-        current_user.id == room.teacher_id or db.query(models.ScheduleLesson.id).filter(
-            models.ScheduleLesson.class_id == room.id,
-            models.ScheduleLesson.teacher_id == current_user.id,
-        ).first()
-    ):
-        raise HTTPException(status_code=403, detail="Создать тест может только учитель этого класса")
+    if _role(current_user) == "teacher":
+        subject_key = norm_subject(quiz_in.subject)
+        if not subject_key:
+            raise HTTPException(status_code=400, detail="Выберите предмет из своего расписания")
+        if subject_key not in teacher_subjects_in_class(db, current_user.id, room.id):
+            raise HTTPException(
+                status_code=403,
+                detail="Создавать тесты можно только по предметам, назначенным вам в расписании выбранного класса",
+            )
     if not quiz_in.title.strip():
         raise HTTPException(status_code=400, detail="Укажите название теста")
     if not 1 <= quiz_in.attempts_allowed <= 10:

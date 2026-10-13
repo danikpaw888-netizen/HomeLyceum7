@@ -33,6 +33,7 @@ export default function AdminDashboard() {
   const [openAssignmentId, setOpenAssignmentId] = useState(null)
   const [submissionsByAssignment, setSubmissionsByAssignment] = useState({})
   const [loadingAssignmentId, setLoadingAssignmentId] = useState(null)
+  const [replacingAttachmentKey, setReplacingAttachmentKey] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
@@ -108,6 +109,33 @@ export default function AdminDashboard() {
       setAllAssignments(await api.adminAssignments())
     } catch (err) {
       setError(`Не удалось загрузить задания учителей: ${err.message}`)
+    }
+  }
+
+  async function replaceAssignmentAttachment(assignment, attachment, file) {
+    if (!file) return
+    const key = `${assignment.id}-${attachment.id || 'legacy'}`
+    setReplacingAttachmentKey(key)
+    setError('')
+    setMessage('')
+    try {
+      const updated = await api.replaceAssignmentAttachment(assignment.id, attachment.id || 0, file)
+      setAllAssignments((prev) => prev.map((item) => {
+        if (item.id !== assignment.id) return item
+        const current = item.attachments || []
+        const exists = attachment.id && current.some((entry) => entry.id === attachment.id)
+        return {
+          ...item,
+          attachments: exists
+            ? current.map((entry) => entry.id === attachment.id ? updated : entry)
+            : [updated],
+        }
+      }))
+      setMessage(`Вложение в задании «${assignment.title}» заменено на «${updated.original_filename}».`)
+    } catch (err) {
+      setError(`Не удалось заменить вложение: ${err.message}`)
+    } finally {
+      setReplacingAttachmentKey('')
     }
   }
 
@@ -535,13 +563,32 @@ export default function AdminDashboard() {
                           {attachments.length > 0 && (
                             <div className="mt-3">
                               <p className="text-xs font-medium text-gray-600 mb-1.5">Материалы учителя</p>
-                              <div className="flex flex-wrap gap-2">
-                                {attachments.map((file, index) => (
-                                  <ProtectedFileLink key={file.id || file.file_path || index} path={file.file_path}
-                                    className="inline-flex items-center gap-1 rounded-lg border border-brand-100 bg-brand-50 px-2.5 py-1.5 text-xs text-brand-700 hover:bg-brand-100">
-                                    📎 {file.original_filename || 'Вложение'}
-                                  </ProtectedFileLink>
-                                ))}
+                              <div className="space-y-2">
+                                {attachments.map((file, index) => {
+                                  const key = `${assignment.id}-${file.id || 'legacy'}`
+                                  return (
+                                    <div key={file.id || file.file_path || index} className="flex flex-wrap items-center gap-2">
+                                      <ProtectedFileLink path={file.file_path}
+                                        className="inline-flex items-center gap-1 rounded-lg border border-brand-100 bg-brand-50 px-2.5 py-1.5 text-xs text-brand-700 hover:bg-brand-100">
+                                        📎 {file.original_filename || 'Вложение'}
+                                      </ProtectedFileLink>
+                                      <label className={`inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs cursor-pointer hover:bg-gray-50 ${replacingAttachmentKey === key ? 'opacity-60 pointer-events-none' : ''}`}>
+                                        {replacingAttachmentKey === key ? 'Загрузка…' : 'Заменить файл'}
+                                        <input
+                                          type="file"
+                                          accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.heic,.zip,.rar,.xlsx,.xls,.ppt,.pptx"
+                                          className="hidden"
+                                          disabled={!!replacingAttachmentKey}
+                                          onChange={(event) => {
+                                            const replacement = event.target.files?.[0]
+                                            if (replacement) replaceAssignmentAttachment(assignment, file, replacement)
+                                            event.target.value = ''
+                                          }}
+                                        />
+                                      </label>
+                                    </div>
+                                  )
+                                })}
                               </div>
                             </div>
                           )}

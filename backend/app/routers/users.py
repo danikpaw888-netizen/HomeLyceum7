@@ -145,13 +145,16 @@ def delete_account(
 @router.post("/{user_id}/reset-password")
 def reset_user_password(
     user_id: int,
+    payload: dict,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_roles("admin")),
 ):
-    """Сбрасывает пароль и возвращает временный пароль администратору только один раз."""
-    import secrets
-    import string
+    """Устанавливает заданный администратором временный пароль."""
     from ..auth import hash_password
+
+    temporary_password = payload.get("temporary_password", "")
+    if not isinstance(temporary_password, str) or len(temporary_password) < 8 or len(temporary_password) > 128:
+        raise HTTPException(status_code=400, detail="Временный пароль должен содержать от 8 до 128 символов")
 
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
@@ -161,16 +164,13 @@ def reset_user_password(
     if user.approval_status == "deleted":
         raise HTTPException(status_code=400, detail="Нельзя сбросить пароль отключённого аккаунта")
 
-    alphabet = string.ascii_letters + string.digits + "!@#$%_-"
-    temporary_password = "".join(secrets.choice(alphabet) for _ in range(16))
     user.password_hash = hash_password(temporary_password)
     user.must_change_password = True
     log_action(db, current_user, "reset_password", "user", user.id,
-               f"Администратор сбросил пароль пользователя {user.email}; требуется смена при следующем входе.",
+               f"Администратор установил временный пароль пользователю {user.email}; требуется смена при следующем входе.",
                after={"email": user.email, "must_change_password": True})
     db.commit()
-    return {"status": "ok", "temporary_password": temporary_password,
-            "message": "Скопируйте временный пароль сейчас. Повторно показать его будет невозможно."}
+    return {"status": "ok", "message": "Временный пароль установлен. При следующем входе пользователь должен сменить его."}
 
 
 @router.post("/change-password")

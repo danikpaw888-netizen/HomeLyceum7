@@ -98,7 +98,7 @@ export const api = {
   adminAccounts() {
     return request('/users/accounts')
   },
-  resetUserPassword(userId) { return request(`/users/${userId}/reset-password`, { method: 'POST' }) },
+  resetUserPassword(userId, temporary_password) { return request(`/users/${userId}/reset-password`, { method: 'POST', body: { temporary_password } }) },
   changePassword(current_password, new_password) { return request('/users/change-password', { method: 'POST', body: { current_password, new_password } }) },
   deactivateAccount(userId) {
     return request(`/users/${userId}`, { method: 'DELETE' })

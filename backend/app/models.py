@@ -346,6 +346,8 @@ class GradeEntry(Base):
     grade = Column(Integer, nullable=False)
     date = Column(Date, nullable=False, default=date.today)
     comment = Column(Text, default="")
+    # Nullable for ordinary journal grades; populated for homework grades.
+    submission_id = Column(Integer, ForeignKey("submissions.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     student = relationship("User", foreign_keys=[student_id])

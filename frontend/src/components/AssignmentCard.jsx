@@ -21,6 +21,7 @@ export default function AssignmentCard({ assignment, submission, onSubmitted }) 
  <div className="flex justify-between items-start gap-3 flex-wrap"><div>{assignment.subject&&<p className="text-xs font-bold text-brand-700 uppercase tracking-wide">{assignment.subject}</p>}<h2 className="font-semibold text-gray-800 mt-0.5">{assignment.title}</h2></div>
  <span className={`text-xs font-medium px-2.5 py-1 rounded-full border ${overdue?'text-red-600 bg-red-50 border-red-100':'text-amber-700 bg-amber-50 border-amber-100'}`}>{overdue?'⏰ Просрочено':'📅 Срок'} · {dateLabel(assignment.deadline)}</span></div>
  {assignment.description&&<p className="mt-3 text-gray-600 text-sm leading-relaxed whitespace-pre-wrap">{assignment.description}</p>}
+ {overdue&&(!submission||canResubmit)&&<p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">Срок сдачи истёк, но отправить домашнее задание всё ещё можно. Работа будет отмечена как сданная после срока.</p>}
  {shownFiles.length>0&&<div className="mt-3 flex flex-wrap gap-2">{shownFiles.map((f,i)=><ProtectedFileLink key={f.id||f.file_path||i} path={f.file_path} className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 bg-brand-50 hover:bg-brand-100 px-2.5 py-1.5 rounded-md">📎 {f.original_filename||'Материал от учителя'}</ProtectedFileLink>)}</div>}
  {submission&&<div className="mt-4 bg-gray-50 rounded-lg p-3.5 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><p className="font-medium text-gray-700">{graded?'✅ Проверено':'⏳ На проверке'} · Попытка {attempts}{assignment.allow_resubmission!==false? ` из ${maxAttempts}`:''}</p>{graded&&<span className={`font-bold px-2.5 py-1 rounded-md border ${gradeColor(submission.grade)}`}>{submission.grade}/10</span>}</div>
  <div className="flex flex-wrap gap-2 mt-2">{shownSubmissionFiles.map((f,i)=><ProtectedFileLink key={f.id||f.file_path||i} path={f.file_path} className="text-xs text-brand-600 underline">{f.original_filename||'Открыть мой файл'}</ProtectedFileLink>)}</div>
@@ -34,7 +35,7 @@ export default function AssignmentCard({ assignment, submission, onSubmitted }) 
  {files.length>0&&<p className="text-xs text-gray-500">{files.length} файлов: {files.map(f=>f.name).join(', ')}</p>}
  <input type="text" placeholder="Комментарий (необязательно)" value={comment} onChange={e=>setComment(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
  {error&&<p className="text-red-600 text-xs bg-red-50 rounded-md px-2 py-1">{error}</p>}
- <button type="submit" disabled={busy} className="bg-brand-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-brand-700 transition w-full sm:w-auto disabled:opacity-60">{busy?'Отправка…':submission?'Отправить исправленный вариант':'Отправить решение'}</button>
+ <button type="submit" disabled={busy} className="bg-brand-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-brand-700 transition w-full sm:w-auto disabled:opacity-60">{busy?'Отправка…':submission?'Отправить исправленный вариант':overdue?'Отправить решение с опозданием':'Отправить решение'}</button>
  </form>}
  </article>
 }

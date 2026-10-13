@@ -44,6 +44,15 @@ export default function StudentDashboard() {
     return submissions.find((s) => s.assignment_id === assignmentId)
   }
 
+  const groupedAssignments = Object.entries(
+    assignments.reduce((groups, assignment) => {
+      const subject = (assignment.subject || '').trim() || 'Без предмета'
+      if (!groups[subject]) groups[subject] = []
+      groups[subject].push(assignment)
+      return groups
+    }, {})
+  ).sort(([subjectA], [subjectB]) => subjectA.localeCompare(subjectB, 'ru'))
+
   return (
     <div className={`p-6 mx-auto animate-fade-in ${tab === 'grades' ? 'max-w-5xl' : 'max-w-2xl'}`}>
       <h1 className="text-2xl font-bold mb-4 text-gray-800">🏠 Мой учебный центр</h1>
@@ -123,16 +132,31 @@ export default function StudentDashboard() {
           {assignments.length === 0 && (
             <p className="text-gray-500 text-sm">Пока нет заданий — попросите учителя добавить вас в класс.</p>
           )}
-          <div className="flex flex-col gap-4">
-            {assignments.map((a) => (
-              <AssignmentCard
-                key={a.id}
-                assignment={a}
-                submission={submissionFor(a.id)}
-                onSubmitted={(newSub) =>
-                  setSubmissions((prev) => [...prev.filter((s) => s.assignment_id !== a.id), newSub])
-                }
-              />
+          <div className="flex flex-col gap-5">
+            {groupedAssignments.map(([subject, subjectAssignments]) => (
+              <section key={subject} className="rounded-xl border border-gray-200 bg-gray-50/70 p-3 sm:p-4">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand-50 text-brand-700">📚</span>
+                    {subject}
+                  </h2>
+                  <span className="text-xs text-gray-500 bg-white border border-gray-200 rounded-full px-2.5 py-1">
+                    {subjectAssignments.length} {subjectAssignments.length === 1 ? 'задание' : subjectAssignments.length < 5 ? 'задания' : 'заданий'}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-3">
+                  {subjectAssignments.map((a) => (
+                    <AssignmentCard
+                      key={a.id}
+                      assignment={a}
+                      submission={submissionFor(a.id)}
+                      onSubmitted={(newSub) =>
+                        setSubmissions((prev) => [...prev.filter((s) => s.assignment_id !== a.id), newSub])
+                      }
+                    />
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
         </>

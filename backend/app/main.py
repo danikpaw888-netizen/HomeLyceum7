@@ -60,6 +60,10 @@ def migrate_schema():
     if "attempt_count" not in submission_cols:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE submissions ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 1"))
+    if "is_submitted" not in submission_cols:
+        # Existing rows stay marked as submitted; new draft rows set False explicitly.
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE submissions ADD COLUMN is_submitted BOOLEAN NOT NULL DEFAULT TRUE"))
 
     db = SessionLocal()
     try:

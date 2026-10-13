@@ -324,7 +324,8 @@ def grade_submission(submission_id: int, grade_in: schemas.GradeIn, db: Session 
                 teacher_id=current_user.id,
                 subject=(assignment.subject or "Без предмета").strip(),
                 grade=grade_in.grade,
-                date=submission.graded_at.date(),
+                # Calendar displays the assignment on its deadline date.
+                date=assignment.deadline.date(),
                 comment=journal_comment,
                 submission_id=submission.id,
             )
@@ -335,7 +336,7 @@ def grade_submission(submission_id: int, grade_in: schemas.GradeIn, db: Session 
             journal_entry.teacher_id = current_user.id
             journal_entry.subject = (assignment.subject or "Без предмета").strip()
             journal_entry.grade = grade_in.grade
-            journal_entry.date = submission.graded_at.date()
+            journal_entry.date = assignment.deadline.date()
             journal_entry.comment = journal_comment
 
     log_action(db, current_user, "grade", "submission", submission.id,

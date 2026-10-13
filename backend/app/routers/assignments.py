@@ -60,6 +60,21 @@ def _owned_or_admin(assignment: models.Assignment, user: models.User) -> None:
         raise HTTPException(status_code=403, detail="Редактировать задание может только создавший его учитель")
 
 
+def _require_assignment_edit_access(db: Session, assignment: models.Assignment, user: models.User) -> None:
+    """Разрешает редактирование задания создателю, администратору или учителю этого предмета."""
+    role = user.role.value if hasattr(user.role, "value") else user.role
+    if role == "admin" or assignment.teacher_id == user.id:
+        return
+    if role == "teacher" and norm_subject(assignment.subject) in teacher_subjects_in_class(
+        db, user.id, assignment.class_id
+    ):
+        return
+    raise HTTPException(
+        status_code=403,
+        detail="Редактировать задание может только создавший его учитель или учитель, которому назначен этот предмет",
+    )
+
+
 def _require_teacher_subject(db: Session, user: models.User, class_id: int, subject: str) -> None:
     role = user.role.value if hasattr(user.role, "value") else user.role
     if role != "teacher":
@@ -308,7 +323,7 @@ async def update_assignment(
     ).first()
     if not item:
         raise HTTPException(status_code=404, detail="Задание не найдено")
-    _owned_or_admin(item, current_user)
+    _require_assignment_edit_access(db, item, current_user)
     if not title.strip():
         raise HTTPException(status_code=400, detail="Название задания не может быть пустым")
     if not 1 <= max_attempts <= 20:

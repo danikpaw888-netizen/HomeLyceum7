@@ -5,7 +5,7 @@ import LearningTools from '../components/LearningTools.jsx'
 import ProtectedFileLink from '../components/ProtectedFileLink.jsx'
 import QuizCenter from '../components/QuizCenter.jsx'
 
-const empty = () => ({subject:'', title:'', description:'', deadline:'', allow_resubmission:true, max_attempts:3})
+const empty = () => ({subject:'', title:'', description:'', created_at:localDateTime(new Date()), deadline:'', allow_resubmission:true, max_attempts:3})
 const field = 'border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500'
 const localDateTime = value => { const d = new Date(value); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16) }
 
@@ -16,9 +16,9 @@ export default function TeacherDashboard() {
  useEffect(()=>{api.listStudents().then(setStudents).catch(e=>setError(e.message))},[])
  useEffect(()=>{if(selectedClass)api.listClassAssignments(selectedClass).then(setAssignments).catch(e=>setError(e.message));else setAssignments([]);setExpanded(null);setSubs({});cancelEdit()},[selectedClass])
  function cancelEdit(){setEditingId(null);setForm(empty());setFiles([]);setKeepIds([])}
- function edit(a){setEditingId(a.id);setForm({subject:a.subject||'',title:a.title,description:a.description||'',deadline:localDateTime(a.deadline),allow_resubmission:a.allow_resubmission!==false,max_attempts:a.max_attempts||3});setFiles([]);setKeepIds((a.attachments||[]).filter(x=>x.is_active).map(x=>x.id));setError('');setNotice('')}
+ function edit(a){setEditingId(a.id);setForm({subject:a.subject||'',title:a.title,description:a.description||'',created_at:localDateTime(a.created_at || new Date()),deadline:localDateTime(a.deadline),allow_resubmission:a.allow_resubmission!==false,max_attempts:a.max_attempts||3});setFiles([]);setKeepIds((a.attachments||[]).filter(x=>x.is_active).map(x=>x.id));setError('');setNotice('')}
  async function save(e){e.preventDefault();setError('');setNotice('');if(files.length+keepIds.length>10){setError('Можно оставить и добавить не более 10 файлов.');return}
- try{const payload={...form,deadline:new Date(form.deadline).toISOString(),max_attempts:Number(form.max_attempts),files}
+ try{const payload={...form,deadline:new Date(form.deadline).toISOString(),created_at:form.created_at,max_attempts:Number(form.max_attempts),files}
  if(editingId){const result=await api.updateAssignment(editingId,{...payload,keep_attachment_ids:keepIds});setAssignments(prev=>prev.map(a=>a.id===result.id?result:a));setNotice('Задание обновлено. Ученики и родители уведомлены.')}
  else{const result=await api.createAssignment({...payload,class_id:selectedClass});setAssignments(prev=>[...prev,result].sort((a,b)=>new Date(a.deadline)-new Date(b.deadline)));setNotice('Задание создано. Ученики и родители уведомлены.')}
  cancelEdit()
@@ -35,7 +35,12 @@ export default function TeacherDashboard() {
  {selectedClass&&<section className="bg-white rounded-xl shadow-card p-4"><h2 className="font-semibold mb-3">{editingId?'✏️ Редактирование задания':'✏️ Новое задание'}</h2>
  <form onSubmit={save} className="grid sm:grid-cols-2 gap-3">
  <input className={field} placeholder="Предмет" value={form.subject} onChange={e=>setForm(f=>({...f,subject:e.target.value}))}/>
- <input className={field} type="datetime-local" required value={form.deadline} onChange={e=>setForm(f=>({...f,deadline:e.target.value}))}/>
+ <label className="text-xs text-gray-600">Дата выдачи задания
+   <input className={field+' block w-full mt-1'} type="datetime-local" required value={form.created_at} onChange={e=>setForm(f=>({...f,created_at:e.target.value}))}/>
+ </label>
+ <label className="text-xs text-gray-600">Срок сдачи
+   <input className={field+' block w-full mt-1'} type="datetime-local" required value={form.deadline} onChange={e=>setForm(f=>({...f,deadline:e.target.value}))}/>
+ </label>
  <input className={field+' sm:col-span-2'} placeholder="Название задания" required value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))}/>
  <textarea className={field+' sm:col-span-2'} rows={3} placeholder="Описание" value={form.description} onChange={e=>setForm(f=>({...f,description:e.target.value}))}/>
  {editingId&&<div className="sm:col-span-2 border rounded-lg p-3"><p className="text-sm font-medium mb-2">Сохранить текущие вложения</p>
@@ -48,7 +53,7 @@ export default function TeacherDashboard() {
  </form></section>}
  {assignments.map(a=>{const active=(a.attachments||[]).filter(x=>x.is_active);const filesToShow=active.length?active:(a.file_path?[{file_path:a.file_path,original_filename:a.original_filename}]:[]);const work=subs[a.id]||[]
  return <article key={a.id} className="bg-white rounded-xl shadow-card p-4"><div className="flex flex-col sm:flex-row sm:justify-between gap-3"><div className="min-w-0"><p className="text-xs uppercase text-brand-700 font-semibold">{a.subject||'Без предмета'}</p><h3 className="font-semibold text-gray-800">{a.title}</h3>{a.description&&<p className="text-sm text-gray-500 mt-1 whitespace-pre-wrap">{a.description}</p>}
- <p className="text-xs text-gray-400 mt-1">Срок: {new Date(a.deadline).toLocaleString('ru-RU')} · {a.allow_resubmission===false?'Без повторной сдачи':`Попыток: ${a.max_attempts||3}`}</p><div className="flex flex-wrap gap-2 mt-2">{filesToShow.map((f,i)=><ProtectedFileLink key={f.id||f.file_path||i} path={f.file_path} className="text-xs text-brand-700 underline">📎 {f.original_filename||'Вложение'}</ProtectedFileLink>)}</div></div>
+ <p className="text-xs text-gray-400 mt-1">Выдано: {a.created_at ? new Date(a.created_at).toLocaleString('ru-RU') : '—'} · Срок: {new Date(a.deadline).toLocaleString('ru-RU')} · {a.allow_resubmission===false?'Без повторной сдачи':`Попыток: ${a.max_attempts||3}`}</p><div className="flex flex-wrap gap-2 mt-2">{filesToShow.map((f,i)=><ProtectedFileLink key={f.id||f.file_path||i} path={f.file_path} className="text-xs text-brand-700 underline">📎 {f.original_filename||'Вложение'}</ProtectedFileLink>)}</div></div>
  <div className="flex flex-wrap gap-2 shrink-0"><button onClick={()=>edit(a)} className="border rounded-lg px-3 py-2 text-xs">✏️ Изменить</button><button onClick={()=>remove(a)} className="border border-red-100 text-red-600 rounded-lg px-3 py-2 text-xs">Удалить</button><button onClick={()=>toggleSubs(a.id)} className="bg-brand-50 text-brand-700 rounded-lg px-3 py-2 text-xs">{expanded===a.id?'Скрыть работы':`Работы · ${work.length||'проверить'}`}</button></div></div>
  {expanded===a.id&&<div className="border-t mt-3 pt-3 space-y-2">{work.length===0&&<p className="text-sm text-gray-500">Пока никто не сдал работу.</p>}{work.map(s=><SubmissionRow key={s.id} submission={s} studentName={studentName(s.student_id)} onGrade={(g,f)=>grade(s.id,a.id,g,f)}/>)}</div>}
  </article>})}

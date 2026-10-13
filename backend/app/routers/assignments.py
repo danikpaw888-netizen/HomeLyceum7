@@ -49,7 +49,7 @@ async def _save_uploads(upload_files: List[UploadFile]) -> List[dict]:
         stored = f"{uuid.uuid4().hex}{ext}"
         with open(os.path.join(settings.UPLOAD_DIR, stored), "wb") as stream:
             stream.write(contents)
-        saved.append({"file_path": f"/{settings.UPLOAD_DIR}/{stored}", "original_filename": filename})
+        saved.append({"file_path": f"/uploads/{stored}", "original_filename": filename})
     return saved
 
 

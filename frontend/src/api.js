@@ -200,8 +200,15 @@ export const api = {
 
   fileUrl(path) {
     if (!path) return null
-    const safePath = path.replace(/^\/uploads\//, '/files/')
-    return API_URL.replace(/\/$/, '') + (safePath.startsWith('/') ? safePath : '/' + safePath)
+    // DB rows created before UPLOAD_DIR became absolute may contain the full
+    // server filesystem path. Normalize both legacy and new values to the
+    // private-file endpoint, never exposing a filesystem path to the browser.
+    const normalized = String(path).replace(/\\/g, '/')
+    const uploadsMatch = normalized.match(/(?:^|\/)uploads\/(.+)$/)
+    const safePath = uploadsMatch
+      ? `/files/${uploadsMatch[1]}`
+      : (normalized.startsWith('/files/') ? normalized : (normalized.startsWith('/') ? normalized : `/${normalized}`))
+    return API_URL.replace(/\/$/, '') + safePath
   },
 
   async openFile(path) {

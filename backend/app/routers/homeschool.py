@@ -88,7 +88,7 @@ async def add_document(
         record_id=record_id,
         document_type=document_type,
         title=title,
-        file_path=f"/{settings.UPLOAD_DIR}/{stored_name}",
+        file_path=f"/uploads/{stored_name}",
         original_filename=file.filename or stored_name,
         uploaded_by=current_user.id,
     )

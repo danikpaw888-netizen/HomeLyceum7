@@ -30,6 +30,7 @@ class User(Base):
     full_name = Column(String(100), nullable=False)
     email = Column(String(100), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=False)
+    must_change_password = Column(Boolean, nullable=False, default=False, server_default="false")
     role = Column(Enum(Role), nullable=False)
     # Новые учётные записи ждут проверки администратора.
     # Строковый статус удобнее для SQLite/PostgreSQL и допускает pending/approved/rejected.

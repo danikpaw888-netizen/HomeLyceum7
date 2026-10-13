@@ -65,6 +65,17 @@ def migrate_schema():
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE submissions ADD COLUMN is_submitted BOOLEAN NOT NULL DEFAULT TRUE"))
 
+    grade_cols = {c["name"] for c in inspect(engine).get_columns("grade_entries")}
+    if "submission_id" not in grade_cols:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE grade_entries ADD COLUMN submission_id INTEGER"))
+    # One linked journal row per submission; NULL is allowed for ordinary journal grades.
+    with engine.begin() as conn:
+        conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_grade_entries_submission_id "
+            "ON grade_entries (submission_id)"
+        ))
+
     db = SessionLocal()
     try:
         # Однофайловые вложения предыдущих версий показываются как записи новой модели.
@@ -90,6 +101,31 @@ def migrate_schema():
                     original_filename=item.original_filename or "Файл ученика",
                     is_current=True, attempt_number=item.attempt_count or 1,
                 ))
+        # Import already graded homework into the journal once; linked grades must not duplicate.
+        for submission in db.query(models.Submission).filter(
+            models.Submission.grade.isnot(None),
+            models.Submission.is_submitted.is_(True),
+        ).all():
+            linked_grade = db.query(models.GradeEntry).filter(
+                models.GradeEntry.submission_id == submission.id
+            ).first()
+            assignment = submission.assignment
+            if linked_grade or not assignment:
+                continue
+            graded_date = submission.graded_at or submission.submitted_at or datetime.utcnow()
+            journal_comment = f"Домашнее задание: {assignment.title}"
+            if submission.teacher_feedback:
+                journal_comment += f"\\nКомментарий учителя: {submission.teacher_feedback}"
+            db.add(models.GradeEntry(
+                student_id=submission.student_id,
+                class_id=assignment.class_id,
+                teacher_id=assignment.teacher_id,
+                subject=(assignment.subject or "Без предмета").strip(),
+                grade=submission.grade,
+                date=graded_date.date(),
+                comment=journal_comment,
+                submission_id=submission.id,
+            ))
         db.commit()
     finally:
         db.close()

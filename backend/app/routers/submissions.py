@@ -207,6 +207,17 @@ def unsubmit_homework(
         {"file_path": a.file_path, "original_filename": a.original_filename}
         for a in submission.attachments if a.is_current
     ]
+    linked_grade = db.query(models.GradeEntry).filter(
+        models.GradeEntry.submission_id == submission.id
+    ).first()
+    if linked_grade:
+        log_action(
+            db, current_user, "delete", "grade", linked_grade.id,
+            f"Оценка по домашнему заданию «{assignment.title}» убрана из текущего журнала после отмены сдачи",
+            before={"grade": linked_grade.grade, "submission_id": submission.id},
+        )
+        db.delete(linked_grade)
+
     db.add(models.SubmissionAttempt(
         submission_id=submission.id,
         attempt_number=max(1, submission.attempt_count or 1),
@@ -298,6 +309,35 @@ def grade_submission(submission_id: int, grade_in: schemas.GradeIn, db: Session 
     submission.grade = grade_in.grade
     submission.teacher_feedback = grade_in.teacher_feedback
     submission.graded_at = datetime.utcnow()
+
+    if assignment is not None:
+        journal_entry = db.query(models.GradeEntry).filter(
+            models.GradeEntry.submission_id == submission.id
+        ).first()
+        journal_comment = f"Домашнее задание: {assignment.title}"
+        if grade_in.teacher_feedback:
+            journal_comment += f"\\nКомментарий учителя: {grade_in.teacher_feedback}"
+        if journal_entry is None:
+            journal_entry = models.GradeEntry(
+                student_id=submission.student_id,
+                class_id=assignment.class_id,
+                teacher_id=current_user.id,
+                subject=(assignment.subject or "Без предмета").strip(),
+                grade=grade_in.grade,
+                date=submission.graded_at.date(),
+                comment=journal_comment,
+                submission_id=submission.id,
+            )
+            db.add(journal_entry)
+        else:
+            journal_entry.student_id = submission.student_id
+            journal_entry.class_id = assignment.class_id
+            journal_entry.teacher_id = current_user.id
+            journal_entry.subject = (assignment.subject or "Без предмета").strip()
+            journal_entry.grade = grade_in.grade
+            journal_entry.date = submission.graded_at.date()
+            journal_entry.comment = journal_comment
+
     log_action(db, current_user, "grade", "submission", submission.id,
                f"Поставлена оценка {grade_in.grade}/10 за «{submission.assignment.title}»",
                before=before, after={"grade": submission.grade, "teacher_feedback": submission.teacher_feedback})

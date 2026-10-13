@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,6 +20,13 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Use one stable absolute path regardless of the process working directory.
+# Render persistent disks can be mounted by setting UPLOAD_DIR=/var/data/uploads.
+_upload_dir = Path(settings.UPLOAD_DIR).expanduser()
+if not _upload_dir.is_absolute():
+    _upload_dir = Path(__file__).resolve().parents[1] / _upload_dir
+settings.UPLOAD_DIR = str(_upload_dir.resolve())
 
 # Убеждаемся, что папка для файлов существует
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)

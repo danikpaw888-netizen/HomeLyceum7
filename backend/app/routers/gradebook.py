@@ -186,6 +186,9 @@ def update_grade(
         if linked_submission:
             linked_submission.grade = grade_in.grade
             linked_submission.graded_at = datetime.utcnow()
+            linked_assignment = linked_submission.assignment
+            if linked_assignment:
+                entry.date = linked_assignment.deadline.date()
     log_action(db, current_user, "update", "grade", entry.id, f"Изменена оценка ученика #{entry.student_id}",
                before=before, after={"grade": entry.grade, "comment": entry.comment})
     db.commit()
@@ -346,7 +349,8 @@ def student_grades(
         items.append(schemas.StudentGradeItem(
             subject=assignment.subject or "Без предмета",
             grade=submission.grade,
-            date=submission.graded_at or submission.submitted_at or datetime.utcnow(),
+            # Keep the grade view aligned with the assignment's calendar date.
+            date=datetime.combine(assignment.deadline.date(), datetime.min.time()),
             source="assignment",
             label=assignment.title,
             comment=submission.teacher_feedback,

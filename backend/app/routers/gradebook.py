@@ -346,7 +346,8 @@ def student_grades(
         items.append(schemas.StudentGradeItem(
             subject=assignment.subject or "Без предмета",
             grade=submission.grade,
-            date=submission.graded_at or submission.submitted_at or datetime.utcnow(),
+            # Use the assignment issue date when a grade has no journal row yet.
+            date=datetime.combine((assignment.created_at or submission.graded_at or submission.submitted_at or datetime.utcnow()).date(), datetime.min.time()),
             source="assignment",
             label=assignment.title,
             comment=submission.teacher_feedback,

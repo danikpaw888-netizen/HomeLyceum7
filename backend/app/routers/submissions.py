@@ -43,84 +43,198 @@ async def _save_uploads(upload_files: List[UploadFile]) -> List[dict]:
 
 
 @router.post("/{assignment_id}", response_model=schemas.SubmissionOut)
-async def submit_homework(
-    assignment_id: int, comment: str = Form(""),
-    file: Optional[UploadFile] = File(None), files: Optional[List[UploadFile]] = File(None),
-    db: Session = Depends(get_db), current_user: models.User = Depends(require_roles("student")),
+async def save_homework_draft(
+    assignment_id: int,
+    comment: str = Form(""),
+    clear_files: bool = Form(False),
+    file: Optional[UploadFile] = File(None),
+    files: Optional[List[UploadFile]] = File(None),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_roles("student")),
 ):
+    """Save work as a draft; teachers do not see it until the student turns it in."""
     assignment = db.query(models.Assignment).filter(
         models.Assignment.id == assignment_id, models.Assignment.is_active.is_(True)
     ).first()
     if not assignment:
         raise HTTPException(status_code=404, detail="Задание не найдено или оно уже закрыто")
     enrolled = db.query(models.Enrollment).filter(
-        models.Enrollment.class_id == assignment.class_id, models.Enrollment.student_id == current_user.id
+        models.Enrollment.class_id == assignment.class_id,
+        models.Enrollment.student_id == current_user.id,
     ).first()
     if not enrolled:
         raise HTTPException(status_code=403, detail="Вы не состоите в этом классе")
 
+    existing = db.query(models.Submission).filter(
+        models.Submission.assignment_id == assignment_id,
+        models.Submission.student_id == current_user.id,
+    ).first()
+    if existing and existing.is_submitted:
+        raise HTTPException(status_code=400, detail="Сначала отмените сдачу, чтобы изменить прикреплённые файлы")
+
     upload_files = [f for f in (files or []) if f and f.filename]
     if file and file.filename:
         upload_files.append(file)
+    if len(upload_files) > MAX_FILES:
+        raise HTTPException(status_code=400, detail="К одному ответу можно прикрепить не более 10 файлов")
     uploads = await _save_uploads(upload_files)
-    existing = db.query(models.Submission).filter(
-        models.Submission.assignment_id == assignment_id, models.Submission.student_id == current_user.id
-    ).first()
 
     if existing:
-        if not assignment.allow_resubmission:
-            raise HTTPException(status_code=400, detail="Повторная сдача этого задания запрещена")
-        max_attempts = max(1, assignment.max_attempts or 1)
-        if (existing.attempt_count or 1) >= max_attempts:
-            raise HTTPException(status_code=400, detail=f"Достигнут лимит попыток: {max_attempts}")
-        old_files = [{"file_path": a.file_path, "original_filename": a.original_filename}
-                     for a in existing.attachments if a.is_current]
-        db.add(models.SubmissionAttempt(
-            submission_id=existing.id, attempt_number=existing.attempt_count or 1,
-            file_path=existing.file_path, original_filename=existing.original_filename,
-            comment=existing.comment, grade=existing.grade, teacher_feedback=existing.teacher_feedback,
-            submitted_at=existing.submitted_at, graded_at=existing.graded_at,
-            attachments_json=json.dumps(old_files, ensure_ascii=False),
-        ))
+        if clear_files and not uploads:
+            for attachment in existing.attachments:
+                if attachment.is_current:
+                    attachment.is_current = False
+            existing.file_path = None
+            existing.original_filename = None
         if uploads:
             for attachment in existing.attachments:
                 if attachment.is_current:
                     attachment.is_current = False
             for upload in uploads:
                 existing.attachments.append(models.SubmissionAttachment(
-                    **upload, is_current=True, attempt_number=(existing.attempt_count or 1) + 1))
-            existing.file_path, existing.original_filename = uploads[0]["file_path"], uploads[0]["original_filename"]
-        before_attempts = existing.attempt_count or 1
-        old_grade = existing.grade
+                    **upload, is_current=True, attempt_number=max(1, (existing.attempt_count or 0) + 1)
+                ))
+            existing.file_path = uploads[0]["file_path"]
+            existing.original_filename = uploads[0]["original_filename"]
         existing.comment = comment
-        existing.submitted_at = datetime.utcnow()
-        existing.attempt_count = before_attempts + 1
-        existing.grade = None
-        existing.teacher_feedback = ""
-        existing.graded_at = None
-        log_action(db, current_user, "resubmit", "submission", existing.id,
-                   f"Повторно отправлена работа по заданию «{assignment.title}»",
-                   before={"attempt_count": before_attempts, "grade": old_grade},
-                   after={"attempt_count": existing.attempt_count, "files": [x["original_filename"] for x in uploads]})
+        log_action(
+            db, current_user, "save_draft", "submission", existing.id,
+            f"Сохранён черновик работы по заданию «{assignment.title}»",
+            after={"assignment_id": assignment.id, "files": [x["original_filename"] for x in uploads],
+                   "clear_files": clear_files},
+        )
         submission = existing
-        message = f"Ученик {current_user.full_name} повторно отправил работу «{assignment.title}»."
     else:
         submission = models.Submission(
-            assignment_id=assignment_id, student_id=current_user.id,
+            assignment_id=assignment_id,
+            student_id=current_user.id,
             file_path=uploads[0]["file_path"] if uploads else None,
             original_filename=uploads[0]["original_filename"] if uploads else None,
-            comment=comment, attempt_count=1)
+            comment=comment,
+            attempt_count=0,
+            is_submitted=False,
+            submitted_at=None,
+        )
         db.add(submission)
         db.flush()
         for upload in uploads:
-            submission.attachments.append(models.SubmissionAttachment(**upload, is_current=True, attempt_number=1))
-        log_action(db, current_user, "create", "submission", submission.id,
-                   f"Отправлена работа по заданию «{assignment.title}»",
-                   after={"assignment_id": assignment.id, "files": [x["original_filename"] for x in uploads]})
-        message = f"Ученик {current_user.full_name} отправил работу «{assignment.title}»."
+            submission.attachments.append(models.SubmissionAttachment(
+                **upload, is_current=True, attempt_number=1
+            ))
+        log_action(
+            db, current_user, "create_draft", "submission", submission.id,
+            f"Создан черновик работы по заданию «{assignment.title}»",
+            after={"assignment_id": assignment.id, "files": [x["original_filename"] for x in uploads]},
+        )
 
-    notify_users(db, [assignment.teacher_id] if assignment.teacher_id else [],
-                 "submission", "Получена работа", message, "/")
+    db.commit()
+    db.refresh(submission)
+    return submission
+
+
+@router.put("/{submission_id}/turn-in", response_model=schemas.SubmissionOut)
+def turn_in_homework(
+    submission_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_roles("student")),
+):
+    """Send prepared draft to the teacher."""
+    submission = db.query(models.Submission).filter(
+        models.Submission.id == submission_id,
+        models.Submission.student_id == current_user.id,
+    ).first()
+    if not submission:
+        raise HTTPException(status_code=404, detail="Работа не найдена")
+    if submission.is_submitted:
+        raise HTTPException(status_code=400, detail="Работа уже сдана")
+    assignment = submission.assignment
+    if not assignment or not assignment.is_active:
+        raise HTTPException(status_code=404, detail="Задание не найдено или оно уже закрыто")
+
+    previous_attempts = max(0, submission.attempt_count or 0)
+    max_attempts = max(1, assignment.max_attempts or 1)
+    if previous_attempts == 0:
+        next_attempt = 1
+    elif assignment.allow_resubmission and previous_attempts < max_attempts:
+        next_attempt = previous_attempts + 1
+    else:
+        # Re-turning in after cancelling a submission edits the same work item.
+        next_attempt = previous_attempts
+
+    submission.is_submitted = True
+    submission.submitted_at = datetime.utcnow()
+    submission.attempt_count = next_attempt
+    submission.grade = None
+    submission.teacher_feedback = ""
+    submission.graded_at = None
+    log_action(
+        db, current_user, "turn_in", "submission", submission.id,
+        f"Сдана работа по заданию «{assignment.title}»",
+        before={"is_submitted": False, "attempt_count": previous_attempts},
+        after={"is_submitted": True, "attempt_count": submission.attempt_count,
+               "files": [a.original_filename for a in submission.attachments if a.is_current]},
+    )
+    notify_users(
+        db, [assignment.teacher_id] if assignment.teacher_id else [],
+        "submission", "Получена работа",
+        f"Ученик {current_user.full_name} сдал работу «{assignment.title}».", "/",
+    )
+    db.commit()
+    db.refresh(submission)
+    return submission
+
+
+@router.put("/{submission_id}/unsubmit", response_model=schemas.SubmissionOut)
+def unsubmit_homework(
+    submission_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_roles("student")),
+):
+    """Cancel turn-in without losing files; the submission becomes editable again."""
+    submission = db.query(models.Submission).filter(
+        models.Submission.id == submission_id,
+        models.Submission.student_id == current_user.id,
+    ).first()
+    if not submission:
+        raise HTTPException(status_code=404, detail="Работа не найдена")
+    if not submission.is_submitted:
+        raise HTTPException(status_code=400, detail="Работа уже находится в черновиках")
+    assignment = submission.assignment
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Задание не найдено")
+
+    current_files = [
+        {"file_path": a.file_path, "original_filename": a.original_filename}
+        for a in submission.attachments if a.is_current
+    ]
+    db.add(models.SubmissionAttempt(
+        submission_id=submission.id,
+        attempt_number=max(1, submission.attempt_count or 1),
+        file_path=submission.file_path,
+        original_filename=submission.original_filename,
+        comment=submission.comment,
+        grade=submission.grade,
+        teacher_feedback=submission.teacher_feedback,
+        submitted_at=submission.submitted_at,
+        graded_at=submission.graded_at,
+        attachments_json=json.dumps(current_files, ensure_ascii=False),
+    ))
+    before = {
+        "is_submitted": True,
+        "attempt_count": submission.attempt_count,
+        "grade": submission.grade,
+        "submitted_at": submission.submitted_at,
+    }
+    submission.is_submitted = False
+    submission.submitted_at = None
+    submission.grade = None
+    submission.teacher_feedback = ""
+    submission.graded_at = None
+    log_action(
+        db, current_user, "unsubmit", "submission", submission.id,
+        f"Отменена сдача работы по заданию «{assignment.title}»",
+        before=before, after={"is_submitted": False, "draft_preserved": True},
+    )
     db.commit()
     db.refresh(submission)
     return submission
@@ -167,6 +281,8 @@ def grade_submission(submission_id: int, grade_in: schemas.GradeIn, db: Session 
         raise HTTPException(status_code=404, detail="Работа не найдена")
     role = current_user.role.value if hasattr(current_user.role, "value") else current_user.role
     assignment = submission.assignment
+    if not submission.is_submitted:
+        raise HTTPException(status_code=400, detail="Нельзя оценить работу, которую ученик не сдал")
     if role == "teacher" and (
         assignment is None or norm_subject(assignment.subject) not in teacher_subjects_in_class(
             db, current_user.id, assignment.class_id

@@ -11,6 +11,7 @@ from ..auth import get_current_user, require_roles
 from ..config import settings
 from ..database import get_db
 from ..events import log_action
+from ..storage import store_upload, delete_stored_upload
 
 router = APIRouter(prefix="/homeschool", tags=["homeschool"])
 
@@ -80,15 +81,14 @@ async def add_document(
         raise HTTPException(status_code=400, detail="Файл слишком большой (макс. 20 МБ)")
 
     stored_name = f"{uuid.uuid4().hex}{ext}"
-    disk_path = os.path.join(settings.UPLOAD_DIR, stored_name)
-    with open(disk_path, "wb") as f:
-        f.write(contents)
+    stored_path = f"/uploads/{stored_name}"
+    store_upload(stored_path, file.filename or stored_name, contents, file.content_type)
 
     doc = models.HomeschoolDocument(
         record_id=record_id,
         document_type=document_type,
         title=title,
-        file_path=f"/uploads/{stored_name}",
+        file_path=stored_path,
         original_filename=file.filename or stored_name,
         uploaded_by=current_user.id,
     )
@@ -145,6 +145,7 @@ def delete_document(
     db.commit()
 
     if not (other_homeschool_reference or other_assignment_reference or other_submission_reference):
+        delete_stored_upload(stored_path)
         upload_root = os.path.realpath(settings.UPLOAD_DIR)
         stored_name = os.path.basename((stored_path or "").replace("\\\\", "/"))
         if stored_name not in ("", ".", ".."):

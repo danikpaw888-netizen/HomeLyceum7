@@ -3,7 +3,7 @@ import os
 from typing import Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from .. import models
@@ -11,6 +11,7 @@ from ..auth import get_current_user
 from ..config import settings
 from ..database import get_db
 from ..access import norm_subject, teacher_subjects_in_class
+from ..models import StoredFile
 
 router = APIRouter(prefix="/files", tags=["private files"])
 
@@ -156,10 +157,31 @@ def download_private_file(
         raise HTTPException(status_code=404, detail="Файл не найден")
 
     stored_path, original_name = matches[0]
+
+    # New uploads live in the SQL database, so they survive Render redeploys,
+    # restarts, and ephemeral-filesystem cleanup. Keep disk fallback for legacy files.
+    stored_file = db.query(StoredFile).filter(
+        StoredFile.file_path == stored_path
+    ).first()
+    if stored_file is None:
+        stored_file = db.query(StoredFile).filter(
+            StoredFile.file_path.endswith("/" + relative_path.split("/")[-1])
+        ).first()
+    media_type = (
+        stored_file.content_type if stored_file
+        else mimetypes.guess_type(original_name)[0] or "application/octet-stream"
+    )
+    if stored_file is not None:
+        from urllib.parse import quote
+        download_name = os.path.basename(original_name or stored_file.original_filename)
+        return Response(
+            content=stored_file.content,
+            media_type=media_type,
+            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(download_name)}"},
+        )
+
     upload_root = os.path.realpath(settings.UPLOAD_DIR)
     disk_path = os.path.realpath(os.path.join(upload_root, relative_path))
     if os.path.commonpath([upload_root, disk_path]) != upload_root or not os.path.isfile(disk_path):
         raise HTTPException(status_code=404, detail="Файл не найден")
-
-    media_type = mimetypes.guess_type(original_name)[0] or "application/octet-stream"
     return FileResponse(disk_path, filename=os.path.basename(original_name), media_type=media_type)

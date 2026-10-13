@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { api } from '../api.js'
+import { useAuth } from '../context/AuthContext.jsx'
 import ClassManager from '../components/ClassManager.jsx'
 import LearningTools from '../components/LearningTools.jsx'
 import ProtectedFileLink from '../components/ProtectedFileLink.jsx'
@@ -10,13 +11,27 @@ const field = 'border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline
 const localDateTime = value => { const d = new Date(value); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16) }
 
 export default function TeacherDashboard() {
+ const { user } = useAuth()
  const [selectedClass,setSelectedClass]=useState(null), [assignments,setAssignments]=useState([]), [students,setStudents]=useState([])
+ const [classSubjects,setClassSubjects]=useState([]), [subjectsLoading,setSubjectsLoading]=useState(false)
  const [error,setError]=useState(''), [notice,setNotice]=useState(''), [form,setForm]=useState(empty), [files,setFiles]=useState([])
  const [editingId,setEditingId]=useState(null), [keepIds,setKeepIds]=useState([]), [expanded,setExpanded]=useState(null), [subs,setSubs]=useState({})
  useEffect(()=>{api.listStudents().then(setStudents).catch(e=>setError(e.message))},[])
  useEffect(()=>{if(selectedClass)api.listClassAssignments(selectedClass).then(setAssignments).catch(e=>setError(e.message));else setAssignments([]);setExpanded(null);setSubs({});cancelEdit()},[selectedClass])
+ useEffect(()=>{
+  if(!selectedClass||!user?.id){setClassSubjects([]);setSubjectsLoading(false);return}
+  let cancelled=false
+  setSubjectsLoading(true)
+  api.classSchedule(selectedClass).then(lessons=>{
+   if(cancelled)return
+   const subjects=[...new Set(lessons.filter(lesson=>lesson.teacher_id===user.id&&lesson.subject?.trim()).map(lesson=>lesson.subject.trim()))].sort((a,b)=>a.localeCompare(b,'ru'))
+   setClassSubjects(subjects)
+   setForm(prev=>({...prev,subject:subjects.includes(prev.subject)?prev.subject:subjects[0]||''}))
+  }).catch(e=>{if(!cancelled)setError(e.message)}).finally(()=>{if(!cancelled)setSubjectsLoading(false)})
+  return ()=>{cancelled=true}
+ },[selectedClass,user?.id])
  function cancelEdit(){setEditingId(null);setForm(empty());setFiles([]);setKeepIds([])}
- function edit(a){setEditingId(a.id);setForm({subject:a.subject||'',title:a.title,description:a.description||'',created_at:localDateTime(a.created_at || new Date()),deadline:localDateTime(a.deadline),allow_resubmission:a.allow_resubmission!==false,max_attempts:a.max_attempts||3});setFiles([]);setKeepIds((a.attachments||[]).filter(x=>x.is_active).map(x=>x.id));setError('');setNotice('')}
+ function edit(a){setEditingId(a.id);setForm({subject:classSubjects.includes(a.subject)?a.subject:'',title:a.title,description:a.description||'',created_at:localDateTime(a.created_at || new Date()),deadline:localDateTime(a.deadline),allow_resubmission:a.allow_resubmission!==false,max_attempts:a.max_attempts||3});setFiles([]);setKeepIds((a.attachments||[]).filter(x=>x.is_active).map(x=>x.id));setError('');setNotice('')}
  async function save(e){e.preventDefault();setError('');setNotice('');if(files.length+keepIds.length>10){setError('Можно оставить и добавить не более 10 файлов.');return}
  try{const payload={...form,deadline:new Date(form.deadline).toISOString(),created_at:form.created_at,max_attempts:Number(form.max_attempts),files}
  if(editingId){const result=await api.updateAssignment(editingId,{...payload,keep_attachment_ids:keepIds});setAssignments(prev=>prev.map(a=>a.id===result.id?result:a));setNotice('Задание обновлено. Ученики и родители уведомлены.')}
@@ -34,7 +49,10 @@ export default function TeacherDashboard() {
  <div className="grid md:grid-cols-3 gap-5"><ClassManager onSelectClass={setSelectedClass}/><div className="md:col-span-2 flex flex-col gap-4">
  {selectedClass&&<section className="bg-white rounded-xl shadow-card p-4"><h2 className="font-semibold mb-3">{editingId?'✏️ Редактирование задания':'✏️ Новое задание'}</h2>
  <form onSubmit={save} className="grid sm:grid-cols-2 gap-3">
- <input className={field} placeholder="Предмет" value={form.subject} onChange={e=>setForm(f=>({...f,subject:e.target.value}))}/>
+ <select className={field} required value={form.subject} disabled={subjectsLoading||classSubjects.length===0} onChange={e=>setForm(f=>({...f,subject:e.target.value}))}>
+  <option value="" disabled>{subjectsLoading?'Загружаем предметы…':classSubjects.length?'Выберите свой предмет':'Нет назначенных предметов'}</option>
+  {classSubjects.map(subject=><option key={subject} value={subject}>{subject}</option>)}
+ </select>
  <label className="text-xs text-gray-600">Дата выдачи задания
    <input className={field+' block w-full mt-1'} type="datetime-local" required value={form.created_at} onChange={e=>setForm(f=>({...f,created_at:e.target.value}))}/>
  </label>
@@ -47,9 +65,11 @@ export default function TeacherDashboard() {
  {(assignments.find(a=>a.id===editingId)?.attachments||[]).filter(a=>a.is_active).map(a=><label key={a.id} className="flex gap-2 py-1 text-sm"><input type="checkbox" checked={keepIds.includes(a.id)} onChange={e=>setKeepIds(ids=>e.target.checked?[...ids,a.id]:ids.filter(id=>id!==a.id))}/>{a.original_filename}</label>)}</div>}
  <div className="sm:col-span-2"><label className="block text-sm font-medium mb-1">Вложения — до 10 файлов, до 20 МБ каждый</label><input type="file" multiple onChange={e=>setFiles(Array.from(e.target.files||[]).slice(0,10))} className="text-sm w-full"/>
  {files.length>0&&<p className="text-xs text-gray-500 mt-1">{files.length} новых: {files.map(f=>f.name).join(', ')}</p>}</div>
+ {!subjectsLoading&&classSubjects.length===0&&<p className="sm:col-span-2 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2">Для выбранного класса вам не назначен предмет в расписании. Попросите администратора привязать вас к предмету — пока выдача заданий недоступна.</p>}
+ {editingId&& !classSubjects.includes(assignments.find(a=>a.id===editingId)?.subject)&&classSubjects.length>0&&<p className="sm:col-span-2 text-xs text-amber-700">Предмет старого задания больше не привязан к вам в расписании. Выберите предмет из списка, чтобы сохранить изменения.</p>}
  <label className="sm:col-span-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={form.allow_resubmission} onChange={e=>setForm(f=>({...f,allow_resubmission:e.target.checked}))}/>Разрешить повторную сдачу</label>
  <label className="flex items-center gap-2 text-sm">Попыток <select className={field} disabled={!form.allow_resubmission} value={form.max_attempts} onChange={e=>setForm(f=>({...f,max_attempts:Number(e.target.value)}))}>{[2,3,4,5,10,20].map(n=><option key={n}>{n}</option>)}</select></label>
- <div className="sm:col-span-2 flex gap-2"><button className="bg-brand-600 text-white rounded-lg px-4 py-2 text-sm">{editingId?'Сохранить изменения':'Создать задание'}</button>{editingId&&<button type="button" onClick={cancelEdit} className="border rounded-lg px-4 py-2 text-sm">Отмена</button>}</div>
+ <div className="sm:col-span-2 flex gap-2"><button disabled={subjectsLoading||!classSubjects.length||!form.subject} className="bg-brand-600 text-white rounded-lg px-4 py-2 text-sm disabled:opacity-50">{editingId?'Сохранить изменения':'Создать задание'}</button>{editingId&&<button type="button" onClick={cancelEdit} className="border rounded-lg px-4 py-2 text-sm">Отмена</button>}</div>
  </form></section>}
  {assignments.map(a=>{const active=(a.attachments||[]).filter(x=>x.is_active);const filesToShow=active.length?active:(a.file_path?[{file_path:a.file_path,original_filename:a.original_filename}]:[]);const work=subs[a.id]||[]
  return <article key={a.id} className="bg-white rounded-xl shadow-card p-4"><div className="flex flex-col sm:flex-row sm:justify-between gap-3"><div className="min-w-0"><p className="text-xs uppercase text-brand-700 font-semibold">{a.subject||'Без предмета'}</p><h3 className="font-semibold text-gray-800">{a.title}</h3>{a.description&&<p className="text-sm text-gray-500 mt-1 whitespace-pre-wrap">{a.description}</p>}

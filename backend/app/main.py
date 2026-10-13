@@ -142,18 +142,17 @@ def migrate_schema():
                 ).first()
 
             if admin:
-                # Bootstrap-учётка всегда остаётся активной и гарантированно
-                # принимает пароль из настроек в локальной demo-сборке.
+                # Bootstrap may ensure role/approval, but must never reset an
+                # existing administrator's password on every process restart.
                 admin.role = models.Role.admin
                 admin.approval_status = "approved"
-                admin.password_hash = hash_password(settings.BOOTSTRAP_ADMIN_PASSWORD)
                 if not admin.full_name:
                     admin.full_name = settings.BOOTSTRAP_ADMIN_NAME or "Главный администратор"
             elif legacy_admin:
                 legacy_admin.email = settings.BOOTSTRAP_ADMIN_EMAIL
                 legacy_admin.role = models.Role.admin
                 legacy_admin.approval_status = "approved"
-                legacy_admin.password_hash = hash_password(settings.BOOTSTRAP_ADMIN_PASSWORD)
+                # Preserve the legacy admin's existing password hash.
                 admin = legacy_admin
             else:
                 admin = models.User(
@@ -201,3 +200,15 @@ app.include_router(quizzes.router)
 @app.get("/")
 def root():
     return {"message": "API школьной платформы работает"}
+
+
+@app.get("/health")
+def health():
+    """Application readiness probe: verifies that the configured database responds."""
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except Exception:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=503, detail="Database is unavailable")
+    return {"status": "ok", "database": "ok"}

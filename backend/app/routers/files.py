@@ -64,7 +64,9 @@ def _can_access_assignment(db: Session, user: models.User, assignment: models.As
 
 def _can_access_document(db: Session, user: models.User, record: models.HomeschoolRecord) -> bool:
     role = _role(user)
-    if role == "admin" or (role == "student" and record.student_id == user.id):
+    # Документы о переводе доступны администрации и родителю/опекуну,
+    # но не из аккаунта ученика.
+    if role == "admin":
         return True
     if role == "parent":
         return bool(db.query(models.ParentStudent.id).filter(

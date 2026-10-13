@@ -85,16 +85,6 @@ export default function StudentDashboard() {
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5 text-sm animate-fade-in-up">
           <p className="font-medium text-amber-800">🏠 Вы переведены на домашнее обучение</p>
           <p className="text-amber-700 text-xs mt-1">С {homeschool.start_date} · {homeschool.reason}</p>
-          {homeschool.documents?.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-3">
-              {homeschool.documents.map((doc) => (
-                <a key={doc.id} href={api.fileUrl(doc.file_path)} target="_blank" rel="noreferrer"
-                  className="bg-white/70 border border-amber-200 rounded-lg px-2.5 py-1.5 text-xs text-amber-800 hover:bg-white">
-                  📎 {doc.title}
-                </a>
-              ))}
-            </div>
-          )}
         </div>
       )}
 

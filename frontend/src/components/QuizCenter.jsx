@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { api } from '../api.js'
+import { useAuth } from '../context/AuthContext.jsx'
 
 const blankOption = () => ({ option_text: '', is_correct: false })
 const blankQuestion = () => ({
@@ -41,6 +42,9 @@ export default function QuizCenter({ role, classId }) {
 }
 
 function TeacherQuizCenter({ classId }) {
+  const { user } = useAuth()
+  const [classSubjects, setClassSubjects] = useState([])
+  const [subjectsLoading, setSubjectsLoading] = useState(false)
   const [quizzes, setQuizzes] = useState([])
   const [form, setForm] = useState(blankForm)
   const [questions, setQuestions] = useState([blankQuestion()])
@@ -56,6 +60,18 @@ function TeacherQuizCenter({ classId }) {
     try { setQuizzes(await api.classQuizzes(classId)) } catch (e) { setError(e.message) }
   }
   useEffect(() => { load(); setExpanded(null); setAttempts({}) }, [classId])
+  useEffect(() => {
+    if (!classId || !user?.id) { setClassSubjects([]); setSubjectsLoading(false); return }
+    let cancelled = false
+    setSubjectsLoading(true)
+    api.classSchedule(classId).then(lessons => {
+      if (cancelled) return
+      const subjects = [...new Set(lessons.filter(lesson => lesson.teacher_id === user.id && lesson.subject?.trim()).map(lesson => lesson.subject.trim()))].sort((a, b) => a.localeCompare(b, 'ru'))
+      setClassSubjects(subjects)
+      setForm(prev => ({ ...prev, subject: subjects.includes(prev.subject) ? prev.subject : (subjects[0] || '') }))
+    }).catch(e => { if (!cancelled) setError(e.message) }).finally(() => { if (!cancelled) setSubjectsLoading(false) })
+    return () => { cancelled = true }
+  }, [classId, user?.id])
 
   function updateQuestion(index, changes) {
     setQuestions(prev => prev.map((q, i) => i === index ? { ...q, ...changes } : q))
@@ -95,7 +111,7 @@ function TeacherQuizCenter({ classId }) {
         attempts_allowed: Number(form.attempts_allowed), is_published: true, questions: payloadQuestions,
       })
       setQuizzes(prev => [created, ...prev])
-      setForm(blankForm()); setQuestions([blankQuestion()])
+      setForm({ ...blankForm(), subject: classSubjects[0] || '' }); setQuestions([blankQuestion()])
       setNotice('Тест опубликован. Ученикам класса пришло уведомление.')
     } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
@@ -154,7 +170,10 @@ function TeacherQuizCenter({ classId }) {
         <h3 className="font-semibold text-gray-800">Создать тест</h3>
         <div className="grid sm:grid-cols-2 gap-2">
           <input className={field} required placeholder="Название контрольной" value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))}/>
-          <input className={field} placeholder="Предмет" value={form.subject} onChange={e=>setForm(f=>({...f,subject:e.target.value}))}/>
+          <select className={field} required value={form.subject} disabled={subjectsLoading||classSubjects.length===0} onChange={e=>setForm(f=>({...f,subject:e.target.value}))}>
+            <option value="" disabled>{subjectsLoading ? 'Загружаем предметы…' : classSubjects.length ? 'Выберите свой предмет' : 'Нет назначенных предметов'}</option>
+            {classSubjects.map(subject => <option key={subject} value={subject}>{subject}</option>)}
+          </select>
           <textarea className={field+' sm:col-span-2'} rows={2} placeholder="Описание / инструкции" value={form.description} onChange={e=>setForm(f=>({...f,description:e.target.value}))}/>
           <label className="text-xs text-gray-600">Срок (необязательно)<input type="datetime-local" className={field+' block w-full mt-1'} value={form.deadline} onChange={e=>setForm(f=>({...f,deadline:e.target.value}))}/></label>
           <label className="text-xs text-gray-600">Лимит времени в минутах<input type="number" min="1" max="180" className={field+' block w-full mt-1'} value={form.duration_minutes} onChange={e=>setForm(f=>({...f,duration_minutes:e.target.value}))}/></label>
@@ -180,7 +199,8 @@ function TeacherQuizCenter({ classId }) {
           </div>)}
           <button type="button" onClick={()=>setQuestions(prev=>[...prev,blankQuestion()])} disabled={questions.length>=100} className="text-sm border border-dashed border-gray-300 rounded-lg px-3 py-2">+ Добавить вопрос</button>
         </div>
-        <button disabled={busy} className="bg-brand-600 text-white rounded-lg px-4 py-2.5 text-sm font-medium disabled:opacity-60">{busy?'Публикация…':'Опубликовать тест'}</button>
+        {!subjectsLoading && classSubjects.length===0 && <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2">В расписании этого класса вам не назначен предмет. Попросите администратора привязать вас к предмету, чтобы создавать тесты.</p>}
+        <button disabled={busy||subjectsLoading||!classSubjects.length||!form.subject} className="bg-brand-600 text-white rounded-lg px-4 py-2.5 text-sm font-medium disabled:opacity-60">{busy?'Публикация…':'Опубликовать тест'}</button>
       </form>
       <h3 className="font-semibold text-gray-800 mb-2">Тесты класса</h3>
       {quizzes.length===0?<p className="text-sm text-gray-500">В этом классе пока нет тестов.</p>:<div className="space-y-3">

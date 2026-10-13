@@ -11,6 +11,7 @@ from ..auth import get_current_user, require_roles
 from ..config import settings
 from ..database import get_db
 from ..events import log_action, notify_users
+from ..access import norm_subject, teacher_subjects_in_class
 
 router = APIRouter(prefix="/assignments", tags=["assignments"])
 ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx", ".txt", ".jpg", ".jpeg", ".png", ".heic", ".zip", ".rar", ".xlsx", ".xls", ".ppt", ".pptx"}
@@ -58,6 +59,20 @@ def _owned_or_admin(assignment: models.Assignment, user: models.User) -> None:
         raise HTTPException(status_code=403, detail="Редактировать задание может только создавший его учитель")
 
 
+def _require_teacher_subject(db: Session, user: models.User, class_id: int, subject: str) -> None:
+    role = user.role.value if hasattr(user.role, "value") else user.role
+    if role != "teacher":
+        return
+    subject_key = norm_subject(subject)
+    if not subject_key:
+        raise HTTPException(status_code=400, detail="Выберите предмет из своего расписания")
+    if subject_key not in teacher_subjects_in_class(db, user.id, class_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Выдавать задания можно только по предметам, назначенным вам в расписании выбранного класса",
+        )
+
+
 @router.post("/", response_model=schemas.AssignmentOut)
 async def create_assignment(
     class_id: int = Form(...), subject: str = Form(""), title: str = Form(...),
@@ -77,6 +92,7 @@ async def create_assignment(
         raise HTTPException(status_code=400, detail="Название задания не может быть пустым")
     if not 1 <= max_attempts <= 20:
         raise HTTPException(status_code=400, detail="Число попыток должно быть от 1 до 20")
+    _require_teacher_subject(db, current_user, class_id, subject)
     uploads = await _save_uploads(_incoming(files, file))
     issue_date = _normalize_assignment_datetime(created_at) or datetime.utcnow()
     assignment = models.Assignment(
@@ -284,6 +300,7 @@ async def update_assignment(
         raise HTTPException(status_code=400, detail="Название задания не может быть пустым")
     if not 1 <= max_attempts <= 20:
         raise HTTPException(status_code=400, detail="Число попыток должно быть от 1 до 20")
+    _require_teacher_subject(db, current_user, item.class_id, subject)
 
     before = {"title": item.title, "subject": item.subject, "description": item.description,
               "deadline": item.deadline, "created_at": item.created_at,

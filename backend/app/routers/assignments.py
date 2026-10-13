@@ -172,6 +172,77 @@ def admin_all_assignments(
     return result
 
 
+
+@router.post("/{assignment_id}/attachments/{attachment_id}/replace")
+async def replace_assignment_attachment(
+    assignment_id: int,
+    attachment_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_roles("admin")),
+):
+    """Admin can repair stale attachment metadata by uploading a replacement file."""
+    assignment = db.query(models.Assignment).filter(
+        models.Assignment.id == assignment_id
+    ).first()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Задание не найдено")
+
+    uploads = await _save_uploads([file])
+    if not uploads:
+        raise HTTPException(status_code=400, detail="Выбери файл для загрузки")
+    new_file = uploads[0]
+
+    attachment = None
+    if attachment_id:
+        attachment = db.query(models.AssignmentAttachment).filter(
+            models.AssignmentAttachment.id == attachment_id,
+            models.AssignmentAttachment.assignment_id == assignment_id,
+        ).first()
+        if not attachment:
+            raise HTTPException(status_code=404, detail="Вложение не найдено в этом задании")
+        old_path = attachment.file_path
+        old_name = attachment.original_filename
+        attachment.file_path = new_file["file_path"]
+        attachment.original_filename = new_file["original_filename"]
+        attachment.is_active = True
+        result_id = attachment.id
+    else:
+        # Legacy assignments may only have the original file_path columns.
+        old_path = assignment.file_path
+        old_name = assignment.original_filename
+        attachment = models.AssignmentAttachment(
+            assignment_id=assignment.id,
+            file_path=new_file["file_path"],
+            original_filename=new_file["original_filename"],
+            is_active=True,
+        )
+        db.add(attachment)
+        db.flush()
+        result_id = attachment.id
+
+    if not assignment.file_path or assignment.file_path == old_path:
+        assignment.file_path = new_file["file_path"]
+        assignment.original_filename = new_file["original_filename"]
+
+    log_action(
+        db, current_user, "replace_attachment", "assignment_attachment", result_id,
+        f"Администратор заменил вложение задания «{assignment.title}»",
+        before={"file_path": old_path, "original_filename": old_name},
+        after={"file_path": new_file["file_path"], "original_filename": new_file["original_filename"],
+               "assignment_id": assignment.id},
+    )
+    db.commit()
+    db.refresh(attachment)
+    return {
+        "id": attachment.id,
+        "assignment_id": assignment.id,
+        "file_path": attachment.file_path,
+        "original_filename": attachment.original_filename,
+        "is_active": attachment.is_active,
+    }
+
+
 @router.get("/{assignment_id}", response_model=schemas.AssignmentOut)
 def get_assignment(assignment_id: int, db: Session = Depends(get_db),
                    _: models.User = Depends(get_current_user)):

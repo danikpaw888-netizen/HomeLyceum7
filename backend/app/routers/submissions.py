@@ -13,6 +13,7 @@ from ..config import settings
 from ..database import get_db
 from ..events import log_action, notify_student_and_parents, notify_users
 from ..access import norm_subject, teacher_subjects_in_class
+from ..storage import store_upload
 
 router = APIRouter(prefix="/submissions", tags=["submissions"])
 ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx", ".txt", ".jpg", ".jpeg", ".png", ".heic", ".zip", ".rar", ".xlsx", ".xls", ".ppt", ".pptx"}
@@ -35,9 +36,9 @@ async def _save_uploads(upload_files: List[UploadFile]) -> List[dict]:
     result = []
     for filename, ext, contents in buffered:
         name = f"{uuid.uuid4().hex}{ext}"
-        with open(os.path.join(settings.UPLOAD_DIR, name), "wb") as stream:
-            stream.write(contents)
-        result.append({"file_path": f"/uploads/{name}", "original_filename": filename})
+        file_path = f"/uploads/{name}"
+        store_upload(file_path, filename, contents, upload.content_type)
+        result.append({"file_path": file_path, "original_filename": filename})
     return result
 
 

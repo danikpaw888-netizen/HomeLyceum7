@@ -10,6 +10,7 @@ from .. import models
 from ..auth import get_current_user
 from ..config import settings
 from ..database import get_db
+from ..access import norm_subject, teacher_subjects_in_class
 
 router = APIRouter(prefix="/files", tags=["private files"])
 
@@ -27,15 +28,11 @@ def _can_access_assignment(db: Session, user: models.User, assignment: models.As
     if role == "admin":
         return True
     if role == "teacher":
-        if assignment.teacher_id == user.id:
-            return True
-        classroom = db.query(models.ClassRoom).filter(models.ClassRoom.id == assignment.class_id).first()
-        if classroom and classroom.teacher_id == user.id:
-            return True
-        return bool(db.query(models.ScheduleLesson.id).filter(
-            models.ScheduleLesson.class_id == assignment.class_id,
-            models.ScheduleLesson.teacher_id == user.id,
-        ).first())
+        # Having created an assignment or teaching another subject in the same
+        # class does not grant access to its files; match the assigned subject.
+        return norm_subject(assignment.subject) in teacher_subjects_in_class(
+            db, user.id, assignment.class_id
+        )
     if role == "student":
         if db.query(models.Enrollment.id).filter(
             models.Enrollment.class_id == assignment.class_id,

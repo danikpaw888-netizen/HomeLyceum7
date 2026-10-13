@@ -124,10 +124,17 @@ async def create_assignment(
 
 @router.get("/class/{class_id}", response_model=List[schemas.AssignmentOut])
 def list_class_assignments(class_id: int, db: Session = Depends(get_db),
-                           _: models.User = Depends(require_roles("teacher", "admin"))):
-    return db.query(models.Assignment).filter(
+                           current_user: models.User = Depends(require_roles("teacher", "admin"))):
+    items = db.query(models.Assignment).filter(
         models.Assignment.class_id == class_id, models.Assignment.is_active.is_(True)
     ).order_by(models.Assignment.deadline).all()
+    role = current_user.role.value if hasattr(current_user.role, "value") else current_user.role
+    if role == "admin":
+        return items
+    # Teachers see only assignments for subjects explicitly assigned to them
+    # in this class's schedule, even if another teacher created the assignment.
+    subjects = teacher_subjects_in_class(db, current_user.id, class_id)
+    return [item for item in items if norm_subject(item.subject) in subjects]
 
 
 @router.get("/my/feed", response_model=List[schemas.AssignmentOut])
@@ -270,12 +277,17 @@ async def replace_assignment_attachment(
 
 @router.get("/{assignment_id}", response_model=schemas.AssignmentOut)
 def get_assignment(assignment_id: int, db: Session = Depends(get_db),
-                   _: models.User = Depends(get_current_user)):
+                   current_user: models.User = Depends(get_current_user)):
     item = db.query(models.Assignment).filter(
         models.Assignment.id == assignment_id, models.Assignment.is_active.is_(True)
     ).first()
     if not item:
         raise HTTPException(status_code=404, detail="Задание не найдено")
+    role = current_user.role.value if hasattr(current_user.role, "value") else current_user.role
+    if role == "teacher" and norm_subject(item.subject) not in teacher_subjects_in_class(
+        db, current_user.id, item.class_id
+    ):
+        raise HTTPException(status_code=403, detail="Это задание относится не к вашему предмету")
     return item
 
 

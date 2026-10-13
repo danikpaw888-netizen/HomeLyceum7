@@ -44,23 +44,38 @@ def my_calendar(
     events = []
     assignments = db.query(models.Assignment).filter(
         models.Assignment.class_id.in_(class_ids or [-1]),
-        models.Assignment.deadline >= datetime.combine(start, time.min),
-        models.Assignment.deadline <= datetime.combine(end, time.max),
+        models.Assignment.is_active.is_(True),
+        # Include assignments by issue date OR deadline so either event can be shown.
+        ((models.Assignment.created_at >= datetime.combine(start, time.min)) &
+         (models.Assignment.created_at <= datetime.combine(end, time.max))) |
+        ((models.Assignment.deadline >= datetime.combine(start, time.min)) &
+         (models.Assignment.deadline <= datetime.combine(end, time.max))),
     ).all()
     for item in assignments:
         if not item.is_active:
             continue
-        if role == "student" and db.query(models.Submission.id).filter(
-            models.Submission.assignment_id == item.id,
-            models.Submission.student_id == current_user.id,
-        ).first():
-            status = "submitted"
-        else:
-            status = "upcoming" if item.deadline >= datetime.utcnow() else "overdue"
-        events.append({"id": f"assignment-{item.id}", "event_type": "assignment",
-                       "title": f"Сдать: {item.title}", "subject": item.subject or "",
-                       "date": item.deadline.isoformat(), "description": item.description or "",
-                       "class_name": class_map.get(item.class_id, ""), "status": status})
+        student_submission = None
+        if role == "student":
+            student_submission = db.query(models.Submission).filter(
+                models.Submission.assignment_id == item.id,
+                models.Submission.student_id == current_user.id,
+            ).first()
+        status = "submitted" if student_submission and student_submission.is_submitted else (
+            "upcoming" if item.deadline >= datetime.utcnow() else "overdue"
+        )
+        issue_date = item.created_at or item.deadline
+        if start <= issue_date.date() <= end:
+            events.append({"id": f"assignment-issued-{item.id}", "event_type": "assignment",
+                           "title": f"Выдано: {item.title}", "subject": item.subject or "",
+                           "date": issue_date.isoformat(), "description": item.description or "",
+                           "class_name": class_map.get(item.class_id, ""), "status": "issued",
+                           "assignment_id": item.id})
+        if start <= item.deadline.date() <= end:
+            events.append({"id": f"assignment-deadline-{item.id}", "event_type": "assignment",
+                           "title": f"Сдать: {item.title}", "subject": item.subject or "",
+                           "date": item.deadline.isoformat(), "description": item.description or "",
+                           "class_name": class_map.get(item.class_id, ""), "status": status,
+                           "assignment_id": item.id})
     lessons = db.query(models.ScheduleLesson).filter(
         models.ScheduleLesson.class_id.in_(class_ids or [-1])).all()
     if role == "teacher":

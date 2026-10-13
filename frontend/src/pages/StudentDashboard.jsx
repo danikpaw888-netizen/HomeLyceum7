@@ -51,7 +51,10 @@ export default function StudentDashboard() {
       groups[subject].push(assignment)
       return groups
     }, {})
-  ).sort(([subjectA], [subjectB]) => subjectA.localeCompare(subjectB, 'ru'))
+  ).map(([subject, items]) => [
+    subject,
+    items.sort((a, b) => new Date(a.created_at || a.deadline) - new Date(b.created_at || b.deadline)),
+  ]).sort(([subjectA], [subjectB]) => subjectA.localeCompare(subjectB, 'ru'))
 
   return (
     <div className={`p-6 mx-auto animate-fade-in ${tab === 'grades' ? 'max-w-5xl' : 'max-w-2xl'}`}>

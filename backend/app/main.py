@@ -126,6 +126,20 @@ def migrate_schema():
                 comment=journal_comment,
                 submission_id=submission.id,
             ))
+        # Repair already-linked homework grades that were stamped with the grading date.
+        # Ordinary journal grades (submission_id IS NULL) are not modified.
+        db.execute(
+            text(
+                "UPDATE grade_entries SET date = ("
+                "SELECT date(assignments.created_at) FROM submissions "
+                "JOIN assignments ON assignments.id = submissions.assignment_id "
+                "WHERE submissions.id = grade_entries.submission_id"
+                ") WHERE submission_id IS NOT NULL AND EXISTS ("
+                "SELECT 1 FROM submissions JOIN assignments ON assignments.id = submissions.assignment_id "
+                "WHERE submissions.id = grade_entries.submission_id AND assignments.created_at IS NOT NULL"
+                ")"
+            )
+        )
         db.commit()
     finally:
         db.close()

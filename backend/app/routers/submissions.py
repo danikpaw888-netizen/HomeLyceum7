@@ -32,12 +32,12 @@ async def _save_uploads(upload_files: List[UploadFile]) -> List[dict]:
         contents = await upload.read()
         if len(contents) > MAX_FILE_SIZE:
             raise HTTPException(status_code=400, detail=f"Файл «{upload.filename}» превышает 20 МБ")
-        buffered.append((upload.filename, ext, contents))
+        buffered.append((upload.filename, ext, contents, upload.content_type))
     result = []
-    for filename, ext, contents in buffered:
+    for filename, ext, contents, content_type in buffered:
         name = f"{uuid.uuid4().hex}{ext}"
         file_path = f"/uploads/{name}"
-        store_upload(file_path, filename, contents, upload.content_type)
+        store_upload(file_path, filename, contents, content_type)
         result.append({"file_path": file_path, "original_filename": filename})
     return result
 

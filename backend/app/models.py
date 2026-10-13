@@ -2,7 +2,7 @@ import enum
 from datetime import datetime, date
 
 from sqlalchemy import (
-    Column, Integer, String, Text, DateTime, Date, ForeignKey, Enum, UniqueConstraint, Boolean
+    Column, Integer, String, Text, DateTime, Date, ForeignKey, Enum, UniqueConstraint, Boolean, LargeBinary
 )
 from sqlalchemy.orm import relationship
 
@@ -109,6 +109,18 @@ class ParentStudent(Base):
 
     parent = relationship("User", foreign_keys=[parent_id])
     student = relationship("User", foreign_keys=[student_id])
+
+
+class StoredFile(Base):
+    """File bytes stored in the persistent SQL database, not Render's ephemeral disk."""
+    __tablename__ = "stored_files"
+
+    id = Column(Integer, primary_key=True, index=True)
+    file_path = Column(String(500), nullable=False, unique=True, index=True)
+    original_filename = Column(String(255), nullable=False)
+    content_type = Column(String(150), nullable=False, default="application/octet-stream")
+    content = Column(LargeBinary, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
 class Assignment(Base):

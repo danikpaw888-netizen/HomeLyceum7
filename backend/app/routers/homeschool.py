@@ -215,6 +215,18 @@ def student_records(
         if not link:
             raise HTTPException(status_code=403, detail="Это не ваш ребёнок")
 
-    return db.query(models.HomeschoolRecord).filter(
+    records = db.query(models.HomeschoolRecord).filter(
         models.HomeschoolRecord.student_id == student_id
     ).order_by(models.HomeschoolRecord.start_date.desc()).all()
+
+    # Ученику показываем только статус и даты домашнего обучения, но не кадровые
+    # документы (заявления, приказы, справки и другие вложения).
+    if role == "student":
+        return [
+            {
+                **schemas.HomeschoolOut.model_validate(record).model_dump(),
+                "documents": [],
+            }
+            for record in records
+        ]
+    return records

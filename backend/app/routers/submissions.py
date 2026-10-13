@@ -253,7 +253,10 @@ def list_submissions_for_assignment(assignment_id: int, db: Session = Depends(ge
         db, current_user.id, assignment.class_id
     ):
         raise HTTPException(status_code=403, detail="Проверять можно только задания по вашим предметам")
-    return db.query(models.Submission).filter(models.Submission.assignment_id == assignment_id).all()
+    return db.query(models.Submission).filter(
+        models.Submission.assignment_id == assignment_id,
+        models.Submission.is_submitted.is_(True),
+    ).all()
 
 
 @router.get("/my", response_model=List[schemas.SubmissionOut])

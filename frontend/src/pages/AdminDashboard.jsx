@@ -36,6 +36,8 @@ export default function AdminDashboard() {
   const [replacingAttachmentKey, setReplacingAttachmentKey] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [temporaryPasswords, setTemporaryPasswords] = useState({})
+  const [resettingAccountId, setResettingAccountId] = useState(null)
 
   async function loadCore() {
     try {
@@ -66,6 +68,19 @@ export default function AdminDashboard() {
     } catch (err) {
       setError(err.message)
     }
+  }
+
+  async function resetAccountPassword(account) {
+    const confirmed = window.confirm(`Сбросить пароль для «${account.full_name}» (${account.email})? Старый пароль перестанет работать.`)
+    if (!confirmed) return
+    setError(''); setMessage(''); setResettingAccountId(account.id)
+    setTemporaryPasswords((prev) => { const next = { ...prev }; delete next[account.id]; return next })
+    try {
+      const result = await api.resetUserPassword(account.id)
+      setTemporaryPasswords((prev) => ({ ...prev, [account.id]: result.temporary_password }))
+      setMessage(`Для ${account.email} создан временный пароль. Скопируйте и передайте его пользователю безопасным способом.`)
+    } catch (err) { setError(err.message) }
+    finally { setResettingAccountId(null) }
   }
 
   async function deactivateAccount(account) {
@@ -483,9 +498,22 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                   {account.role !== 'admin' && account.approval_status !== 'deleted' && (
-                    <button onClick={() => deactivateAccount(account)} className="self-start sm:self-auto shrink-0 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg px-3 py-2 text-sm font-medium">
-                      Отключить аккаунт
-                    </button>
+                    <div className="flex flex-wrap gap-2 self-start sm:self-auto shrink-0">
+                      <button onClick={() => resetAccountPassword(account)} disabled={resettingAccountId === account.id} className="border border-blue-200 text-blue-700 hover:bg-blue-50 disabled:opacity-50 rounded-lg px-3 py-2 text-sm font-medium">
+                        {resettingAccountId === account.id ? 'Сбрасываем…' : 'Сбросить пароль'}
+                      </button>
+                      <button onClick={() => deactivateAccount(account)} className="border border-red-200 text-red-600 hover:bg-red-50 rounded-lg px-3 py-2 text-sm font-medium">
+                        Отключить аккаунт
+                      </button>
+                    </div>
+                  )}
+                  {temporaryPasswords[account.id] && (
+                    <div className="basis-full rounded-lg border border-amber-200 bg-amber-50 p-3">
+                      <p className="text-sm font-semibold text-amber-900">Временный пароль — показывается только сейчас</p>
+                      <p className="font-mono text-sm break-all my-2">{temporaryPasswords[account.id]}</p>
+                      <button onClick={() => { navigator.clipboard?.writeText(temporaryPasswords[account.id]); setMessage('Временный пароль скопирован, если браузер разрешил копирование.') }} className="rounded-lg bg-amber-900 text-white px-3 py-2 text-sm">Копировать пароль</button>
+                      <p className="text-xs text-amber-800 mt-2">При входе пользователь должен будет установить новый пароль. Не отправляйте пароль в общие чаты.</p>
+                    </div>
                   )}
                 </div>
               ))}

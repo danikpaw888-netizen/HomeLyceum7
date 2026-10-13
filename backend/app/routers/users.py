@@ -141,6 +141,54 @@ def delete_account(
         "message": "Аккаунт отключён. Связанные учебные данные и история сохранены.",
     }
 
+
+@router.post("/{user_id}/reset-password")
+def reset_user_password(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_roles("admin")),
+):
+    """Сбрасывает пароль и возвращает временный пароль администратору только один раз."""
+    import secrets
+    import string
+    from ..auth import hash_password
+
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Аккаунт не найден")
+    if user.id == current_user.id or user.role == models.Role.admin:
+        raise HTTPException(status_code=400, detail="Сброс пароля для аккаунта администратора запрещён этим действием")
+    if user.approval_status == "deleted":
+        raise HTTPException(status_code=400, detail="Нельзя сбросить пароль отключённого аккаунта")
+
+    alphabet = string.ascii_letters + string.digits + "!@#$%_-"
+    temporary_password = "".join(secrets.choice(alphabet) for _ in range(16))
+    user.password_hash = hash_password(temporary_password)
+    user.must_change_password = True
+    log_action(db, current_user, "reset_password", "user", user.id,
+               f"Администратор сбросил пароль пользователя {user.email}; требуется смена при следующем входе.",
+               after={"email": user.email, "must_change_password": True})
+    db.commit()
+    return {"status": "ok", "temporary_password": temporary_password,
+            "message": "Скопируйте временный пароль сейчас. Повторно показать его будет невозможно."}
+
+
+@router.post("/change-password")
+def change_password(
+    payload: schemas.PasswordChangeIn,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    from ..auth import hash_password, verify_password
+    if not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Текущий пароль указан неверно")
+    if len(payload.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Новый пароль должен содержать не менее 8 символов")
+    current_user.password_hash = hash_password(payload.new_password)
+    current_user.must_change_password = False
+    db.commit()
+    return {"status": "ok", "message": "Пароль успешно изменён"}
+
 @router.get("/", response_model=List[schemas.UserOut])
 def list_users(
     role: str | None = None,

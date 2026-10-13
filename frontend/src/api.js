@@ -164,11 +164,18 @@ export const api = {
   },
 
   // --- submissions ---
-  async submitHomework(assignmentId, { comment, files = [] }) {
+  async submitHomework(assignmentId, { comment, files = [], clear_files = false }) {
     const form = new FormData()
     form.append('comment', comment || '')
+    form.append('clear_files', String(clear_files))
     for (const file of files) if (file) form.append('files', file)
     return request(`/submissions/${assignmentId}`, { method: 'POST', body: form, isForm: true })
+  },
+  turnInSubmission(submissionId) {
+    return request(`/submissions/${submissionId}/turn-in`, { method: 'PUT' })
+  },
+  unsubmitHomework(submissionId) {
+    return request(`/submissions/${submissionId}/unsubmit`, { method: 'PUT' })
   },
   mySubmissions() {
     return request('/submissions/my')

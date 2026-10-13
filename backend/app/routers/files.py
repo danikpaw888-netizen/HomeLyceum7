@@ -89,7 +89,7 @@ def _can_access_submission(
             models.ParentStudent.student_id == submission.student_id,
         ).first())
     if role == "teacher" and assignment:
-        return _can_access_assignment(db, user, assignment)
+        return bool(submission.is_submitted and _can_access_assignment(db, user, assignment))
     return False
 
 

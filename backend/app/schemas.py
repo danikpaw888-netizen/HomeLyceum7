@@ -139,7 +139,8 @@ class SubmissionOut(BaseModel):
     comment: str
     grade: Optional[int] = None
     teacher_feedback: str
-    submitted_at: datetime
+    is_submitted: bool = True
+    submitted_at: Optional[datetime] = None
     graded_at: Optional[datetime] = None
     attempt_count: int = 1
     attachments: List[SubmissionAttachmentOut] = []

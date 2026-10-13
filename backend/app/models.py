@@ -171,7 +171,9 @@ class Submission(Base):
     comment = Column(Text, default="")
     grade = Column(Integer, nullable=True)
     teacher_feedback = Column(Text, default="")
-    submitted_at = Column(DateTime, default=datetime.utcnow)
+    # Existing submissions are treated as already turned in.
+    is_submitted = Column(Boolean, nullable=False, default=True, server_default="true")
+    submitted_at = Column(DateTime, default=datetime.utcnow, nullable=True)
     graded_at = Column(DateTime, nullable=True)
     attempt_count = Column(Integer, nullable=False, default=1, server_default="1")
 

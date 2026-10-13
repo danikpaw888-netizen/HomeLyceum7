@@ -24,6 +24,7 @@ class UserOut(BaseModel):
     email: str
     role: Role
     approval_status: str
+    must_change_password: bool = False
 
 
 class Token(BaseModel):
@@ -312,6 +313,11 @@ class HomeschoolCloseIn(BaseModel):
 
 class UserApprovalIn(BaseModel):
     approved: bool
+
+
+class PasswordChangeIn(BaseModel):
+    current_password: str
+    new_password: str
 
 
 # ---------- Онлайн-тесты и контрольные ----------

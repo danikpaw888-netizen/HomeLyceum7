@@ -198,6 +198,7 @@ class GradeEntryOut(BaseModel):
     grade: int
     date: date
     comment: str
+    submission_id: Optional[int] = None
 
 
 class GradeEntryUpdate(BaseModel):

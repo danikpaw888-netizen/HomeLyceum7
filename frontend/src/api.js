@@ -119,6 +119,15 @@ export const api = {
   adminAssignments() {
     return request('/assignments/admin/all')
   },
+  replaceAssignmentAttachment(assignmentId, attachmentId, file) {
+    const form = new FormData()
+    form.append('file', file)
+    return request(`/assignments/${assignmentId}/attachments/${attachmentId || 0}/replace`, {
+      method: 'POST',
+      body: form,
+      isForm: true,
+    })
+  },
   myFeed() {
     return request('/assignments/my/feed')
   },

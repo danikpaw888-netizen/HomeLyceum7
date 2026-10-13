@@ -29,6 +29,9 @@ def migrate_schema():
     if "approved_by" not in cols:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE users ADD COLUMN approved_by INTEGER"))
+    if "must_change_password" not in cols:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE users ADD COLUMN must_change_password BOOLEAN NOT NULL DEFAULT FALSE"))
 
     class_cols = {c["name"] for c in inspector.get_columns("classes")}
     if "is_active" not in class_cols:

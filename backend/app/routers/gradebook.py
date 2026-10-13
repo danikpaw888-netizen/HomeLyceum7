@@ -179,6 +179,13 @@ def update_grade(
     entry.grade = grade_in.grade
     if grade_in.comment is not None:
         entry.comment = grade_in.comment
+    if entry.submission_id is not None:
+        linked_submission = db.query(models.Submission).filter(
+            models.Submission.id == entry.submission_id
+        ).first()
+        if linked_submission:
+            linked_submission.grade = grade_in.grade
+            linked_submission.graded_at = datetime.utcnow()
     log_action(db, current_user, "update", "grade", entry.id, f"Изменена оценка ученика #{entry.student_id}",
                before=before, after={"grade": entry.grade, "comment": entry.comment})
     db.commit()
@@ -199,7 +206,16 @@ def delete_grade(
     if not can_grade_subject(db, current_user, class_room, entry.subject):
         raise HTTPException(status_code=403, detail=NOT_YOUR_SUBJECT)
     log_action(db, current_user, "delete", "grade", entry.id, f"Удалена оценка ученика #{entry.student_id}",
-               before={"grade": entry.grade, "subject": entry.subject, "student_id": entry.student_id})
+               before={"grade": entry.grade, "subject": entry.subject, "student_id": entry.student_id,
+                       "submission_id": entry.submission_id})
+    if entry.submission_id is not None:
+        linked_submission = db.query(models.Submission).filter(
+            models.Submission.id == entry.submission_id
+        ).first()
+        if linked_submission:
+            linked_submission.grade = None
+            linked_submission.graded_at = None
+            linked_submission.teacher_feedback = ""
     db.delete(entry)
     db.commit()
     return {"status": "ok"}
@@ -281,38 +297,60 @@ def student_grades(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    """Все оценки ученика (и из журнала, и за домашние задания), сгруппировать по предмету можно на фронтенде."""
+    """Return journal and homework grades without displaying linked homework twice."""
     _assert_can_view_student(db, current_user, student_id)
 
     items: List[schemas.StudentGradeItem] = []
-
-    journal_grades = db.query(models.GradeEntry).filter(models.GradeEntry.student_id == student_id).all()
-    for g in journal_grades:
-        items.append(schemas.StudentGradeItem(
-            subject=g.subject,
-            grade=g.grade,
-            date=datetime.combine(g.date, datetime.min.time()),
-            source="journal",
-            label=g.comment or "Оценка в журнале",
-            comment=g.comment,
-        ))
+    linked_submission_ids = set()
+    journal_grades = db.query(models.GradeEntry).filter(
+        models.GradeEntry.student_id == student_id
+    ).all()
+    for entry in journal_grades:
+        if entry.submission_id is not None:
+            linked_submission_ids.add(entry.submission_id)
+            submission = db.query(models.Submission).filter(
+                models.Submission.id == entry.submission_id
+            ).first()
+            assignment = submission.assignment if submission else None
+            items.append(schemas.StudentGradeItem(
+                subject=entry.subject,
+                grade=entry.grade,
+                date=datetime.combine(entry.date, datetime.min.time()),
+                source="assignment" if assignment else "journal",
+                label=assignment.title if assignment else (entry.comment or "Оценка в журнале"),
+                comment=(submission.teacher_feedback if submission else "") or entry.comment,
+            ))
+        else:
+            items.append(schemas.StudentGradeItem(
+                subject=entry.subject,
+                grade=entry.grade,
+                date=datetime.combine(entry.date, datetime.min.time()),
+                source="journal",
+                label=entry.comment or "Оценка в журнале",
+                comment=entry.comment,
+            ))
 
     submissions = db.query(models.Submission).filter(
         models.Submission.student_id == student_id,
         models.Submission.grade.isnot(None),
+        models.Submission.is_submitted.is_(True),
     ).all()
-    for s in submissions:
-        assignment = db.query(models.Assignment).filter(models.Assignment.id == s.assignment_id).first()
+    for submission in submissions:
+        if submission.id in linked_submission_ids:
+            continue
+        assignment = db.query(models.Assignment).filter(
+            models.Assignment.id == submission.assignment_id
+        ).first()
         if not assignment:
             continue
         items.append(schemas.StudentGradeItem(
             subject=assignment.subject or "Без предмета",
-            grade=s.grade,
-            date=s.graded_at or s.submitted_at,
+            grade=submission.grade,
+            date=submission.graded_at or submission.submitted_at or datetime.utcnow(),
             source="assignment",
             label=assignment.title,
-            comment=s.teacher_feedback,
+            comment=submission.teacher_feedback,
         ))
 
-    items.sort(key=lambda i: i.date, reverse=True)
+    items.sort(key=lambda item: item.date, reverse=True)
     return items
